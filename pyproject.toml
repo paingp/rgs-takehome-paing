@@ -1,0 +1,27 @@
+[project]
+name = "symbol-spotter"
+version = "0.1.0"
+description = "Symbol detection for construction takeoff: select a symbol on a drawing, count every instance of it."
+requires-python = ">=3.14"
+dependencies = [
+    "pymupdf==1.28.2",
+    "opencv-python-headless==5.0.0.93",
+    "numpy==2.5.2",
+    "pillow==12.3.0",
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["takeoff", "server", "eval"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

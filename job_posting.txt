@@ -1,0 +1,26 @@
+We're a construction company building our own software — internal tooling that automates the work most firms still do by hand. The bet is a vertically integrated software-and-construction firm where the software is the advantage: every workflow we automate compounds inside a real business that uses it daily.
+This is an early, founder-led hire. You'll build the automation and ML at the center of it, work directly with the founder, and own what you ship.
+What you'll do
+
+Build workflows that automate estimating and project-management tasks.
+Develop agents and ML that read, parse, and make sense of documents and drawings.
+Train CV models
+Connect our software to the tools we already use, and make the output trustworthy and traceable.
+Work directly with the people doing the work, and automate the parts that actually slow them down.
+
+What we're looking for
+Required
+
+1–2 years of software engineering experience (strong internships count).
+Solid software engineering skills, and comfort with APIs and third-party integrations.
+Fluency with modern AI-assisted development tools (e.g. Claude Code, Codex) — and the judgment to verify what they produce.
+Computer vision experience
+A real bias toward correctness. You treat a wrong number as a bug to find, not an acceptable margin of error.
+The builder's instinct You make things for the love of it — the kind of person who loses track of time on a hard problem and surfaces with something real. You probably have side projects, or things you built just to see if you could.
+
+Preferred
+
+Hands-on machine learning experience — document classification, information extraction, retrieval, computer vision, or LLM-based agents.
+Experience with document-processing pipelines, automation, or workflow orchestration.
+Familiarity with the Google Workspace APIs (Drive, Docs, Sheets).
+Exposure to construction, estimating, CAD/BIM, or other messy, operations-heavy domains.

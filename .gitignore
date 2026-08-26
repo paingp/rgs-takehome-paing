@@ -1,0 +1,27 @@
+# Environment
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Context for Claude
+job_posting.txt
+
+# Rasterization and DZI tile caches — regenerated from Skanksa.pdf on demand
+cache/
+*.dzi
+
+# Spike artifacts: the .py files in scratch/ are kept for reference,
+# the renders and arrays they produced are regenerable and large (~104 MB)
+scratch/*.png
+scratch/*.npy
+
+# Eval output
+eval/reports/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
