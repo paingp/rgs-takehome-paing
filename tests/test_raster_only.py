@@ -33,15 +33,47 @@ DETECTION_MODULES = [
 ]
 
 
+def _is_type_checking_guard(node: ast.stmt) -> bool:
+    """`if TYPE_CHECKING:` / `if typing.TYPE_CHECKING:`"""
+    if not isinstance(node, ast.If):
+        return False
+    test = node.test
+    if isinstance(test, ast.Name):
+        return test.id == "TYPE_CHECKING"
+    return isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+
+
 def _imports(module: str) -> set[str]:
-    """Top-level package names imported by takeoff/<module>.py.
+    """Top-level package names imported by takeoff/<module>.py at RUNTIME.
 
     Relative imports are returned as `takeoff.<name>` so the walk can follow them.
+
+    Imports under `if TYPE_CHECKING:` are skipped, and that exception is what lets a
+    detection module import `takeoff.spaces` for its px/inch arithmetic. spaces.py is on the
+    allowed list because coordinate conversion is conceptually about the PDF's rotation, but
+    it only needs pymupdf for an annotation -- so it costs nothing at runtime, and the guard
+    would otherwise reject `candidates.py -> spaces.py` even though no PDF is reachable.
+    The exception is safe by construction: a name imported only under TYPE_CHECKING raises
+    NameError the moment anything tries to use it.
     """
     path = PACKAGE / f"{module}.py"
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    return _imports_from_source(path.read_text(encoding="utf-8"), str(path))
+
+
+def _imports_from_source(source: str, filename: str = "<test>") -> set[str]:
+    tree = ast.parse(source, filename=filename)
     found: set[str] = set()
+
+    # Everything lexically inside a TYPE_CHECKING guard, so the walk below can ignore it.
+    type_only: set[ast.AST] = set()
     for node in ast.walk(tree):
+        if _is_type_checking_guard(node):
+            for inner in ast.walk(node):
+                type_only.add(inner)
+
+    for node in ast.walk(tree):
+        if node in type_only:
+            continue
         if isinstance(node, ast.Import):
             for alias in node.names:
                 found.add(alias.name.split(".")[0])
@@ -99,3 +131,35 @@ def test_detection_module_never_reaches_pymupdf(module: str) -> None:
         f"takeoff.{module} reaches {sorted(leaked)} via {' -> '.join(chain)}. "
         "Detection runs on the raster only; move the PDF access behind raster.py."
     )
+
+
+def test_spaces_is_runtime_pure_so_detectors_may_import_it() -> None:
+    """spaces.py is allowed pymupdf but does not actually need it at runtime.
+
+    Detection modules need its px/inch arithmetic. This asserts that importing it does not
+    smuggle a PDF handle into the detection half of the codebase.
+    """
+    external, _ = _reachable("spaces")
+    assert not external & FORBIDDEN, f"spaces.py reaches {sorted(external & FORBIDDEN)}"
+
+
+TYPE_CHECKING_FORM = """
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    import pymupdf
+"""
+
+RUNTIME_FORMS = [
+    "import pymupdf",
+    "from pymupdf import Rect",
+    "def f():\n    import pymupdf\n",
+    "try:\n    import pymupdf\nexcept ImportError:\n    pymupdf = None\n",
+    "if True:\n    import pymupdf\n",
+]
+
+
+def test_type_checking_exception_is_narrow() -> None:
+    """Only the annotation form is excused; a real runtime import is still caught."""
+    assert "pymupdf" not in _imports_from_source(TYPE_CHECKING_FORM)
+    for runtime_form in RUNTIME_FORMS:
+        assert "pymupdf" in _imports_from_source(runtime_form), runtime_form

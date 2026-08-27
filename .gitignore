@@ -25,3 +25,5 @@ eval/reports/
 Thumbs.db
 .idea/
 .vscode/
+# Uploaded drawings: content-addressed, rebuildable, never committed.
+documents/

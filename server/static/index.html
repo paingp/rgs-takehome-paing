@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Symbol Spotter</title>
+  <link rel="stylesheet" href="/static/viewer.css">
+</head>
+<body>
+  <header>
+    <span class="brand">Symbol&nbsp;Spotter</span>
+    <nav>
+      <select id="doc-select" title="Which drawing to work on"></select>
+      <button id="upload" title="Open a PDF or a scanned drawing (PNG, JPG, TIFF)">Open&hellip;</button>
+      <input id="upload-input" type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" hidden>
+      <span class="divider"></span>
+      <button id="prev" title="Previous sheet">&#8249;</button>
+      <label>Page <input id="page" type="number" min="1" value="5"></label>
+      <span id="count" class="muted"></span>
+      <button id="next" title="Next sheet">&#8250;</button>
+    </nav>
+    <span class="divider"></span>
+    <button id="select-mode" class="toggle wide" title="Drag a box around a symbol (or hold Shift)">
+      Select symbol
+    </button>
+    <button id="candidates-toggle" class="toggle wide"
+            title="Show every blob of ink the detector can even see (C)">
+      Candidates
+    </button>
+    <button id="count-button" class="wide" disabled
+            title="Count every instance of the symbol you selected">
+      Count these
+    </button>
+    <button id="detections-toggle" class="toggle wide" hidden aria-pressed="true"
+            title="Show or hide the detection overlay (D)">
+      Detections
+    </button>
+    <button id="fit-sheet" hidden title="Zoom back out to the whole sheet (F)">Fit sheet</button>
+    <button id="reset" title="Clear the selection, the count and the review (Esc twice)">Reset</button>
+    <span class="spacer"></span>
+    <span id="readout" class="muted"></span>
+  </header>
+
+  <main>
+    <div id="stage">
+      <div id="viewer"></div>
+      <canvas id="overlay"></canvas>
+      <div id="rubber" hidden></div>
+    </div>
+
+    <aside id="panel">
+      <h2>Selection</h2>
+      <div id="preview-wrap">
+        <p id="panel-hint" class="muted small">
+          Turn on <b>Select symbol</b>, then drag a rough box around a door, a marker or a
+          receptacle. The box does not need to be tidy. The tool measures what you enclosed
+          to decide how to find the rest &mdash; a curve is swept for, a shape is matched.
+        </p>
+        <p id="candidates-hint" class="muted small" hidden>
+          <b>Candidates</b> shows every blob of ink the detector can see at all &mdash; the
+          connected pieces left after walls, grid lines and borders are stripped out. Nothing
+          here is matched or judged. It is the difference between <em>&ldquo;the detector
+          never saw it&rdquo;</em> and <em>&ldquo;the detector saw it and scored it
+          low&rdquo;</em>, which need opposite fixes. A symbol with no amber box around it
+          was lost before scoring began.
+        </p>
+        <img id="preview" alt="Selected symbol, magnified" hidden>
+      </div>
+      <dl id="stats" hidden>
+        <dt>Size</dt><dd id="stat-size"></dd>
+        <dt>Pixels</dt><dd id="stat-px"></dd>
+        <dt>Ink blobs</dt><dd id="stat-parts"></dd>
+        <dt>Ink area</dt><dd id="stat-ink"></dd>
+      </dl>
+      <p id="panel-note" class="muted small" hidden></p>
+
+      <section id="results" hidden>
+        <h2>Count</h2>
+        <p id="result-class" class="small"></p>
+        <ul id="bands"></ul>
+        <p id="result-template" class="muted small"></p>
+
+        <div id="review-bar">
+          <button id="hit-prev" title="Previous match (P or ←)">&#8249;</button>
+          <span id="hit-position" class="muted small"></span>
+          <button id="hit-next" title="Next match (N or →)">&#8250;</button>
+          <span class="spacer"></span>
+          <button id="hit-accept" title="Confirm this match (A)">&#10003;</button>
+          <button id="hit-reject" title="Reject this match (R)">&#10007;</button>
+        </div>
+
+        <ol id="hits"></ol>
+
+        <section id="detail" hidden>
+          <h3 id="detail-title"></h3>
+          <img id="detail-crop" alt="The detected glyph, magnified">
+          <dl id="detail-fields"></dl>
+        </section>
+
+        <p id="review-hint" class="muted small">
+          Click a row to fly to it. <b>N</b>/<b>P</b> step, <b>A</b> keeps, <b>R</b> rejects,
+          <b>F</b> fits the sheet, <b>D</b> hides the overlay. Panning and zooming stay live
+          throughout.
+        </p>
+      </section>
+
+      <p class="muted small footnote">
+        One symbol class is registered so far. The margin gate stays dark until a second
+        class exists to compete with &mdash; with nothing to be confused for, a margin would
+        be a number without a meaning.
+      </p>
+    </aside>
+  </main>
+
+  <div id="loading" hidden>
+    <div class="loading-panel">
+      <p id="loading-message">Building tile pyramid&hellip;</p>
+      <div class="bar"><i id="loading-bar"></i></div>
+      <p class="muted small">First view of a sheet renders 460 tiles at 300&nbsp;DPI. Cached after this.</p>
+    </div>
+  </div>
+
+  <script src="/static/vendor/openseadragon/openseadragon.min.js"></script>
+  <script src="/static/viewer.js"></script>
+</body>
+</html>

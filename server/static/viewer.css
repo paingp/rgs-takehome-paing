@@ -1,0 +1,319 @@
+:root {
+  --bg: #1b1d1f;
+  --chrome: #26292c;
+  --line: #3a3f44;
+  --text: #e8eaec;
+  --muted: #9aa1a8;
+  /* Okabe-Ito, the palette the detection bands will use */
+  --accent: #0072B2;   /* counted  */
+  --review: #E69F00;   /* review   */
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+}
+
+body { display: flex; flex-direction: column; }
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  height: 44px;
+  flex: 0 0 auto;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { font-weight: 600; letter-spacing: 0.01em; }
+.spacer { flex: 1; }
+.divider { width: 1px; height: 22px; background: var(--line); }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+nav { display: flex; align-items: center; gap: 8px; }
+nav label { color: var(--muted); }
+
+button {
+  background: #32363a;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  height: 26px;
+  min-width: 26px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+button.wide { padding: 0 11px; }
+button:hover { background: #3d4246; }
+
+button.toggle[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+input[type="number"] {
+  width: 56px;
+  background: #1b1d1f;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+}
+
+main { flex: 1 1 auto; min-height: 0; display: flex; }
+
+#stage { position: relative; flex: 1 1 auto; min-width: 0; }
+#viewer { position: absolute; inset: 0; background: #141618; }
+
+/* The overlay never takes pointer events: OpenSeadragon owns the mouse, and select mode
+   works by disabling its navigation rather than by intercepting events above it. */
+#overlay { position: absolute; inset: 0; pointer-events: none; }
+
+#stage.selecting { cursor: crosshair; }
+
+#rubber {
+  position: absolute;
+  border: 1.5px solid var(--accent);
+  background: rgba(0, 114, 178, 0.12);
+  pointer-events: none;
+}
+#rubber[hidden] { display: none; }
+
+#panel {
+  flex: 0 0 300px;
+  border-left: 1px solid var(--line);
+  background: var(--chrome);
+  padding: 14px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+#panel h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+#preview-wrap {
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  background: #f4f5f6;   /* paper, so the glyph reads as it does on the sheet */
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+#preview-wrap:has(#preview[hidden]) { background: #1f2225; }
+
+#preview { max-width: 100%; image-rendering: pixelated; }
+
+#stats { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
+#stats dt { color: var(--muted); }
+#stats dd { margin: 0; font-variant-numeric: tabular-nums; }
+#stats[hidden] { display: none; }
+
+.footnote { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); }
+
+#loading {
+  position: fixed;
+  inset: 44px 300px 0 0;
+  display: grid;
+  place-items: center;
+  background: rgba(20, 22, 24, 0.86);
+}
+#loading[hidden] { display: none; }
+
+.loading-panel {
+  width: min(420px, 80vw);
+  padding: 22px 24px;
+  background: var(--chrome);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.loading-panel p { margin: 0 0 12px; }
+
+.bar {
+  height: 6px;
+  background: #1b1d1f;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.bar i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+/* ------------------------------------------------------------------ counting a symbol */
+
+#count-button {
+  background: #0072B2;
+  border-color: #0072B2;
+  color: #fff;
+  font-weight: 600;
+}
+#count-button:disabled { background: #2a2f36; border-color: #333a42; color: #6b7681; }
+#count-button:not(:disabled):hover { background: #0084cc; }
+
+#results { border-top: 1px solid #2a2f36; margin-top: 12px; padding-top: 10px; }
+#result-class { margin: 0 0 8px; }
+
+#bands { list-style: none; margin: 0 0 8px; padding: 0; }
+#bands li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 13px;
+}
+#bands .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+#bands .n { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+#hits { list-style: none; margin: 8px 0 0; padding: 0; max-height: 210px; overflow-y: auto; }
+#hits li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+}
+#hits li:hover { background: #22272e; }
+#hits .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+#hits .score { margin-left: auto; font-variant-numeric: tabular-nums; color: #9aa4ae; }
+
+/* --------------------------------------------------------------------- reviewing hits */
+
+#review-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 4px;
+  padding: 5px 6px;
+  background: #1b1f24;
+  border: 1px solid #2a2f36;
+  border-radius: 4px;
+}
+#review-bar .spacer { flex: 1; }
+#review-bar button { min-width: 26px; padding: 2px 7px; }
+#hit-accept[aria-pressed="true"] { background: #0072B2; border-color: #0072B2; color: #fff; }
+#hit-reject[aria-pressed="true"] { background: #CC79A7; border-color: #CC79A7; color: #fff; }
+#hit-position { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+#hits .verdict {
+  width: 12px;
+  text-align: center;
+  font-weight: 700;
+  color: #9aa4ae;
+  flex: none;
+}
+#review-hint { margin: 8px 0 0; line-height: 1.5; }
+#review-hint b {
+  color: #e6e6e6;
+  background: #22272e;
+  border: 1px solid #333a42;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------- one detection's metadata */
+
+#detail {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #2a2f36;
+}
+#detail h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+#detail h3 .chip {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: #0b0d10;
+}
+#detail-crop {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto 10px;
+  background: #fff;
+  border: 1px solid #2a2f36;
+  border-radius: 3px;
+  image-rendering: pixelated;
+}
+#detail-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+#detail-fields dt { color: #9aa4ae; white-space: nowrap; }
+#detail-fields dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+#detail-fields dd.strong { font-weight: 600; }
+#detail-fields .bar {
+  display: inline-block;
+  height: 4px;
+  border-radius: 2px;
+  background: #0072B2;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+#hits .label { color: #9aa4ae; font-size: 11px; }
+
+#reset { margin-left: 2px; }
+#candidates-hint { margin-top: 10px; line-height: 1.55; }
+#candidates-hint em { color: #c9d1d9; font-style: normal; }
+
+/* ------------------------------------------------------------------ choosing a drawing */
+
+#doc-select {
+  background: #1b1f24;
+  color: #e6e6e6;
+  border: 1px solid #333a42;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 12px;
+  max-width: 230px;
+}
+#upload { padding: 4px 10px; }
+#doc-note { color: #E69F00; }
