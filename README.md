@@ -13,23 +13,73 @@ ground truth for grading, and never reaches the detector.
 
 ## Status
 
-**Gate 5: doors count, by a different detector.** Two classes are registered. 124 tests pass.
+**Ground truth and grading are in.** Annotate a page in the viewer — count, accept with `A`,
+reject with `R`, record what the detector *missed* with `M`, mark an instance something
+crosses with `O`, correct a box with `E`, save with `S` — then grade it:
+
+```powershell
+.venv\Scripts\python.exe -m eval.suites --page 5
+```
+
+Precision, recall and F1 per class, **plus the same for occluded instances alone**, plus how
+many hits went to review rather than being claimed. The occluded split is the point: on a real
+sheet the occluded symbols are a handful among forty, so a whole-page average barely moves
+whether they are all found or all missed. Nothing here was gradeable before — every count was
+checked by eye against a contact sheet, and three changes in one session each moved counts
+invisibly until someone looked.
+
+A class is graded on any sheet, not only the one it was registered from: the entry is built on
+its anchor page and run against the page under test. A class nobody has annotated on that page
+is named and skipped rather than scored — `-m eval.suites --page 4` used to report 27 misses
+and a precision of **1.000** against a detector it had never asked to look.
+
+**Where the results are.** Each run writes `eval/reports/<document>/pageNNN.json`: the metrics,
+and every box behind them — what was found, what was missed, what was claimed wrongly, what
+went to review. Press `V` in the viewer to draw that run over the sheet:
+
+```
+green            found it
+vermillion       claimed ink that is not the symbol
+vermillion, dashed   a real instance it never claimed
+amber, dotted    sent to review rather than counted
+```
+
+Click any row in the Grading panel to fly to the ink. This is the answer to *which one* — the
+question a table always provokes and could never answer, and the reason the old habit was to
+render a contact sheet and squint at it. The overlay reads the stored run rather than grading
+live, because a run is a full detection pass (17 s on T5, 53 s on T4) and the tool should not
+have two places where one happens; the panel says how old the run is.
+
+A recorded box is correctable. `E` turns on box editing: click an instance, drag any of eight
+handles, `Del` removes it. What moves is the ANNOTATION, never the detection — the detector's
+box is its claim, and the evidence when it is wrong. This is not cosmetic: the harness matches
+within half the truth box's larger side, so a tighter box is a stricter target.
+
+Occlusion is the annotator's call, made with `O`, and deliberately not inferred from whether
+the detector found the instance. It used to be: accepting a hit wrote `occluded: false` and
+`M` wrote `occluded: true`, so the flag recorded *"the tool missed this"* rather than *"a wall
+crosses this"*. That made the split circular — a crossed symbol the detector did find could
+never enter it, and occluded recall started at 0 by construction.
+
+**Gate 5: doors count, by a different detector.** Two classes are registered. 192 tests pass.
 
 The elevation marker is matched against a template bank. A door is not: measured on T5, ink
 per door varies **11.4x** once line suppression has run, because it leaves a different amount
 of each one behind — so only 47% of door-to-door pairs clear 0.90 and recall runs 0%-68%
 purely on which instance was dragged. The arc's *radius* does not vary at all. Doors are
 counted by sweeping for that circle (`takeoff/doors.py`), and the registry says which detector
-a class needs. **29 swings counted on T5**, best non-door 0.46, ~9 s.
+a class needs. **31 swings counted on T5**, best non-door 0.46, ~13 s.
 
 **Gate 4: the first symbol counts end to end.** Drag a box around an interior
 elevation marker on T5, press **Count these**, and every instance on the sheet comes back
 banded and coloured — 7 counted, 2 held for review, in 0.02 s. 76 tests pass.
 
-Live: `spaces.py`, `raster.py`, `schema.py`, `candidates.py`, `templates.py`, `scoring.py`,
-`classes.py`, `banding.py`, `detect.py`, the DZI pyramid, the server and the viewer.
-Deliberately absent: the margin gate (nothing to compete with until a second class registers),
-`doors.py`, `lifecycle.py`, and the eval harness — ground truth for T5 is still with Paing.
+Live as of that gate: `spaces.py`, `raster.py`, `schema.py`, `candidates.py`,
+`templates.py`, `scoring.py`, `classes.py`, `banding.py`, `detect.py`, the DZI pyramid, the
+server and the viewer. Absent then, landed since: `doors.py`, `regions.py`, the eval harness
+and reports, and the margin gate — which now fires, but only where a marker found inside a
+blob it was fused to shares that ink with a door. Still absent: `lifecycle.py`, and the
+nested-symbol case the margin gate was built for.
 
 The build is gated and stops for testing at each gate; see `PROGRESS.md`.
 
@@ -91,7 +141,8 @@ takeoff/          detector core — pure Python, no HTTP, no UI
   raster.py       PDF -> Raster; DZI tile pyramid                 [live]
   schema.py       boundary types; later Detection / GroundTruth   [live]
   candidates.py   line suppression, components, drag -> symbol    [live]
-  layout.py       sheet -> named regions
+  layout.py       text layer -> captions (grading and labels only)
+  regions.py      sheet -> named blocks; which of them hold drawings    [live]
   classes.py      symbol class registry — how a new symbol gets added   [live]
   templates.py    template extraction, rotation/mirror bank             [live]
   scoring.py      Scorer protocol + StrokeCoverageScorer                [live]
@@ -576,6 +627,53 @@ one: **11 keynote bubbles against 27 doors on T5, and none at all on T6-T8.** Mo
 no type code, so most instances would land in an "unknown type" bucket, and the surveyor's
 actual question — how many doors, how many are new — would have to be reassembled from seven
 counts.
+
+## The ink that hides a symbol
+
+The sweep in `doors.py` ranks circles by how much ink sits on them, which is the right first
+guess and the wrong final answer when something denser than the swing shares the component.
+Both `RE/EX` doors in room 218 on T5 have a keynote ellipse touching the arc: the sweep locks
+onto the top of the bubble at stroke ratio 2.8, `Arc.quality` correctly scores that 0.000, and
+a real door is lost with nothing to say a good arc was underneath it.
+
+`find_swing` deletes the refused fit's ink and sweeps what is left, up to three rounds. Both
+doors come back at radius 117 px — **3.1 ft, the same width as the 29 that never needed it**,
+and agreement with the rest of the sheet is the reason to believe them. T5 goes 29 → 31.
+
+Two cheaper fixes were tried first and are worth recording, because both look obviously right:
+
+| | |
+|---|---|
+| rank circles by `quality` instead of ink | recovers both doors, **loses 15 of 35 arcs**. `quality` is scale-free, so a small clean arc anywhere in a blob also scores 1.000, and the widths it returned were 3.5–3.8 ft rather than 3.1. |
+| keep the top 12 by ink, take the best by quality | safe, but **does not recover them** — the refine pass fills the shortlist with near-duplicates of the ellipse fit. |
+
+Peeling costs 2.4x on the arc path, and only on blobs that fail: a fit that passes first time
+is returned untouched, byte-identical, which `tests/test_doors.py` pins because detection ids
+hash position and review state is keyed on them.
+
+## A sheet is not all drawing
+
+T4 carries two plan viewports, two columns of general notes, a legend and a title-block strip.
+Only the viewports can hold an instance of anything, and **2,722 of its 5,775 candidates (47%)
+are sheet furniture**. `regions.py` segments the sheet — remove runs over 6 in, dilate by a
+0.30 in gutter, label — and classifies each block.
+
+**Not by text density.** `scratch/viewport2.py` calls a block text above 150 characters per
+square inch and by that test every block on both sheets is a drawing: measured densities are
+7–9 in the plan viewports and 44–49 in the notes. The signal is real, the constant is not.
+What separates them is that **set type is all one height and a drawing is not** — the share of
+a block's components within 20% of its median height runs 0.31–0.48 for viewports and
+0.66–0.97 for text, so the gate sits at 0.57.
+
+**Measured off the raster, never off the text layer.** A gate built on `get_text` would give a
+PDF and a scan of the same sheet different candidates, and the detector is not allowed to tell
+them apart.
+
+Counts are unchanged on both sheets — this removes work, not symbols. The template path on T4
+goes 1.08 s to 0.49 s; the arc path gains nothing, because thinness already excluded set type.
+A block with fewer than 20 components stays `unknown` and is treated as drawing: refusing to
+guess must never cost a symbol. Selection still sees the whole sheet, so a legend entry can
+still be dragged and a template built from it.
 
 ## Coordinate spaces
 

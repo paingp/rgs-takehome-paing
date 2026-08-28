@@ -167,11 +167,16 @@ def test_the_detector_is_measured_from_the_selection_not_declared(t5) -> None:
 
 
 def test_doors_counted_on_t5(door_detections) -> None:
-    """27 swings clear the gate. Not ground truth -- T5's annotations are with Paing -- so
-    what this pins is the SEPARATION, which is the property that would silently rot."""
+    """31 swings clear the gate. Not ground truth -- T5's annotations are with Paing -- so
+    what this pins is the SEPARATION, which is the property that would silently rot.
+
+    29 of these were counted before peeling was added; the two extra are the `RE/EX` doors
+    in room 218, each of which has a keynote ellipse touching its swing. Both come back at
+    radius 117 px, which is the same 3.1 ft as the rest of the sheet -- the agreement is the
+    reason to believe they are the real swings rather than a looser gate letting junk in."""
     _, _, _, dets = door_detections
     counted = [d for d in dets if d.status is banding.Status.COUNTED]
-    assert len(counted) == 29, [(d.match, d.bbox_px) for d in counted]
+    assert len(counted) == 31, [(d.match, d.bbox_px) for d in counted]
     assert all(d.match >= classes.SWING_DOOR.counted_at for d in counted)
 
     others = [d for d in dets if d.status is not banding.Status.COUNTED]
@@ -209,6 +214,99 @@ def test_diagnose_speaks_arc_not_template(t5) -> None:
     assert note and "swept for a circle" in note
 
 
+# --------------------------------------------------- peeling: the ink that hides a swing
+
+
+# The two `RE/EX` doors in room 218 on T5. Each is a relocated door with a keynote ellipse
+# drawn touching its swing, so the bubble and the arc are one connected component.
+RE_EX_T5 = ((9434, 1956, 111, 156), (9435, 2680, 112, 107))
+
+
+def test_one_sweep_locks_onto_the_keynote_ellipse_not_the_swing(t5) -> None:
+    """The premise, without which the peel below would be untestable dead code.
+
+    `find_arc` ranks hypotheses by inlier count, and a closed ellipse carries far more ink
+    at a constant radius than a one-stroke arc does. Both blobs therefore come back with a
+    circle traced round the top of the bubble -- stroke_ratio near 2.8, where a drafted
+    swing sits near 1.2 -- and `Arc.quality` correctly refuses it. The door is real, the
+    refusal is right, and the door is lost anyway.
+    """
+    r, found = t5
+    by_box = {c.bbox_px: c for c in found}
+    entry = detect.build_entry(classes.SWING_DOOR, r, found)
+    ink = doors.page_ink_from(r.gray)
+
+    for bbox in RE_EX_T5:
+        arc = doors.find_arc(by_box[bbox].mask, bbox, r.dpi, entry.radius_band_in, ink)
+        assert arc is not None, bbox
+        assert arc.stroke_ratio > doors.STROKE_RATIO_JUNK, (bbox, arc.stroke_ratio)
+        assert arc.quality == 0.0, bbox
+
+
+def test_peeling_finds_the_swing_underneath(t5) -> None:
+    """Delete the refused fit's ink, sweep again, and the door is there."""
+    r, found = t5
+    by_box = {c.bbox_px: c for c in found}
+    entry = detect.build_entry(classes.SWING_DOOR, r, found)
+    ink = doors.page_ink_from(r.gray)
+
+    for bbox in RE_EX_T5:
+        arc = doors.find_swing(
+            by_box[bbox].mask, bbox, r.dpi, entry.radius_band_in, ink,
+            entry.profile.anchored, classes.SWING_DOOR.counted_at,
+        )
+        assert arc is not None, bbox
+        assert arc.quality >= classes.SWING_DOOR.counted_at, (bbox, arc.quality)
+        assert arc.stroke_ratio < doors.STROKE_RATIO_JUNK, (bbox, arc.stroke_ratio)
+        # 3.1 ft -- the same width as the 29 doors that never needed peeling. Agreeing with
+        # the rest of the sheet is the reason to believe this is the real swing and not a
+        # looser gate letting something else through.
+        assert arc.width_ft(r.dpi) == pytest.approx(3.1, abs=0.2), bbox
+
+
+def test_peeling_cannot_touch_a_blob_whose_first_fit_was_already_good(t5) -> None:
+    """Every arc the single sweep already accepted must come back identical.
+
+    Detection ids hash position, and review state and golden counts are keyed on them
+    (decision 10), so a fit that shifted by a pixel because a later stage was added would
+    quietly invalidate work a person had already done.
+    """
+    r, found = t5
+    entry = detect.build_entry(classes.SWING_DOOR, r, found)
+    ink = doors.page_ink_from(r.gray)
+    band, anchored = entry.radius_band_in, entry.profile.anchored
+    gate = classes.SWING_DOOR.counted_at
+    lo, hi = band[0] * r.dpi, band[1] * r.dpi
+
+    checked = 0
+    for c in found:
+        if not 0.55 * lo <= max(c.bbox_px[2], c.bbox_px[3]) <= 2.2 * hi:
+            continue
+        if not doors.thin_enough(c):
+            continue
+        single = doors.find_arc(c.mask, c.bbox_px, r.dpi, band, ink)
+        if single is None or single.quality < gate:
+            continue
+        if not doors.is_swing(single, c.bbox_px, anchored):
+            continue
+        peeled = doors.find_swing(c.mask, c.bbox_px, r.dpi, band, ink, anchored, gate)
+        assert peeled == single, c.bbox_px
+        checked += 1
+
+    assert checked >= 29, f"only {checked} blobs exercised the no-peel path"
+
+
+def test_a_selection_over_a_door_with_a_bubble_on_it_still_reads_as_an_arc(t5) -> None:
+    """Profiling peels too. Otherwise dragging a box round one of these doors would measure
+    the ellipse, read the selection as a shape, and hand it to the template detector."""
+    r, found = t5
+    ink = doors.page_ink_from(r.gray)
+    for bbox in RE_EX_T5:
+        selection = cand.snap(found, bbox, dpi=r.dpi)
+        profile = detect.profile_selection(selection, r.dpi, ink)
+        assert profile.detector == "arc", (bbox, profile.reason)
+
+
 # ------------------------------------------------------------ two classes, side by side
 
 
@@ -224,19 +322,33 @@ def test_registering_a_second_class_changes_neither_count(t5) -> None:
         cid: sum(1 for d in together if d.class_id == cid and d.status is banding.Status.COUNTED)
         for cid in ("door_swing", "elev_marker")
     }
-    assert counts == {"door_swing": 29, "elev_marker": 8}
+    assert counts == {"door_swing": 31, "elev_marker": 9}
 
 
-def test_the_margin_gate_is_still_unexercised_and_says_so(t5) -> None:
-    """Two classes are registered now, but they are not confusable: a hatched triangle and a
-    thin arc never claim the same ink, so no detection has a runner-up. The nested-symbol
-    problem stays untested until two classes actually compete -- record that, do not imply
-    the gate has been proven."""
+def test_the_margin_gate_finally_fires_where_two_classes_claim_one_blob(t5) -> None:
+    """It used to be dark, and this test used to record that it was.
+
+    A hatched triangle and a thin arc never claimed the same ink, so nothing ever had a
+    runner-up and `margin` was None on every detection on the sheet. `fused_windows` changed
+    that: a marker found INSIDE an oversized blob shares that blob with whatever else the
+    blob might be, so the two classes now compete for one piece of ink and the margin is
+    real. This is the first time the second gate has been exercised by anything.
+
+    What it is not yet is the nested-symbol case it was built for -- duplex inside quad,
+    0.816 against 0.681. These margins are wide, because a triangle and an arc are not
+    confusable; the thin ones are all low-scoring doors that no gate would have counted.
+    """
     r, found = t5
     entries = [detect.build_entry(c, r, found) for c in classes.all_classes()]
     dets = detect.detect(r, found, entries)
-    assert all(d.margin is None for d in dets)
-    assert all(d.runner_up is None for d in dets)
+
+    rivals = [d for d in dets if d.margin is not None]
+    assert rivals, "two classes claiming one blob is what gives a margin at all"
+    assert all(d.runner_up is not None for d in rivals)
+
+    # Nothing the tool actually counts is a close call between the two classes.
+    counted = [d for d in rivals if d.status is banding.Status.COUNTED]
+    assert counted and all(d.margin > 0.10 for d in counted)
 
 
 # ---------------------------------------------------- type code as an attribute, not a class
@@ -289,7 +401,7 @@ def test_every_door_on_the_sheet_profiles_as_an_arc(t5) -> None:
     entry = detect.build_entry(classes.SWING_DOOR, r, found)
     counted = [d for d in detect.detect(r, found, [entry])
                if d.status is banding.Status.COUNTED]
-    assert len(counted) == 29
+    assert len(counted) == 31
 
     rng = np.random.default_rng(0)
     verdicts = []
@@ -311,7 +423,7 @@ def test_a_shape_never_profiles_as_a_curve(t5) -> None:
     entry = detect.build_entry(classes.ELEVATION_MARKER, r, found)
     counted = [d for d in detect.detect(r, found, [entry])
                if d.status is banding.Status.COUNTED]
-    assert len(counted) == 8
+    assert len(counted) == 9
 
     rng = np.random.default_rng(1)
     for d in counted:

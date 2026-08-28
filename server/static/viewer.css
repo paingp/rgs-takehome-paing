@@ -220,11 +220,24 @@ main { flex: 1 1 auto; min-height: 0; display: flex; }
   border: 1px solid #2a2f36;
   border-radius: 4px;
 }
-#review-bar .spacer { flex: 1; }
-#review-bar button { min-width: 26px; padding: 2px 7px; }
+#review-bar .spacer { flex: 1; min-width: 0; }
+/* `flex: none` so a control is never squeezed or pushed out of the row. A button that has
+   scrolled off the panel edge is indistinguishable from one that is not there. */
+#review-bar button { min-width: 26px; padding: 2px 7px; flex: none; }
 #hit-accept[aria-pressed="true"] { background: #0072B2; border-color: #0072B2; color: #fff; }
 #hit-reject[aria-pressed="true"] { background: #CC79A7; border-color: #CC79A7; color: #fff; }
-#hit-position { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* min-width: 0 overrides a flex item's automatic minimum size, which for nowrap text is the
+   full width of the string -- that is what let the readout refuse to shrink and shove the
+   buttons off. It now gives way, and truncates, before any control does. */
+#hit-position {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#hit-tally { margin: 0 0 4px; font-variant-numeric: tabular-nums; }
+#hit-tally:empty { display: none; }
 
 #hits .verdict {
   width: 12px;
@@ -317,3 +330,168 @@ main { flex: 1 1 auto; min-height: 0; display: flex; }
 }
 #upload { padding: 4px 10px; }
 #doc-note { color: #E69F00; }
+
+/* ------------------------------------------------------------------ annotating truth */
+
+#truth {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid #2a2f36;
+}
+#truth h2 { margin: 0 0 8px; }
+#truth p { line-height: 1.5; }
+#truth b {
+  color: #e6e6e6;
+  background: #22272e;
+  border: 1px solid #333a42;
+  border-radius: 3px;
+  padding: 0 4px;
+  font-weight: 600;
+}
+#truth-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+/* Edit mode acts on ground truth, not on detections, so it wears the ground-truth pink
+   rather than the blue accent every other toggle uses. */
+#edit-mode[aria-pressed="true"] {
+  background: #CC79A7;
+  border-color: #CC79A7;
+  color: #1b1e22;
+}
+
+#truth-bar button { padding: 3px 9px; }
+
+#truth-legend {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+#truth-legend[hidden] { display: none; }
+#truth-legend li { display: flex; align-items: center; gap: 6px; }
+#truth-legend .swatch {
+  width: 12px;
+  height: 0;
+  flex: none;
+  border-top: 2px dashed currentColor;
+}
+#truth-legend .n { font-variant-numeric: tabular-nums; color: #e6e6e6; }
+/* The zero a person asserts deliberately. Quieter than a recorded count -- it is a claim
+   about absence, and it must not compete with the classes that actually have instances. */
+#truth-legend .none-here {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  cursor: pointer;
+}
+#truth-legend .none-here input { margin: 0; }
+/* The graded run. Green for what the tool got right, vermillion for both ways of being
+   wrong, amber for what it sent to a person -- the same amber the review band already uses,
+   because it is the same claim. */
+#grade-list {
+  list-style: none;
+  margin: 0 0 6px;
+  padding: 0;
+  font-size: 12px;
+}
+#grade-list li.head {
+  color: #e6e6e6;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+#grade-list li.box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--muted);
+}
+#grade-list li.box:hover { background: #262b31; }
+#grade-list .dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+#grade-list .what { color: #e6e6e6; }
+#grade-list .n { margin-left: auto; font-variant-numeric: tabular-nums; }
+#truth-add:not(:disabled) { border-color: #CC79A7; color: #e6b3d0; }
+#truth-add[aria-pressed="true"] { background: #CC79A7; border-color: #CC79A7; color: #1b1e22; }
+#truth-state { display: block; }
+/* Amber while there is work that would be lost, Okabe-Ito bluish green once it is on disk.
+   The saved state is the one that has to be readable at a glance across a long annotation
+   session, so it gets a colour rather than only a word. */
+#truth-state.dirty { color: #E69F00; }
+#truth-state.saved { color: #009E73; }
+
+/* The two steps of recording a miss: armed and waiting for a drag, then holding a box that
+ * needs confirming. Pink throughout, matching the ground-truth boxes on the canvas. */
+.missed-step {
+  margin: 6px 0;
+  padding: 7px 9px;
+  border: 1px solid #CC79A7;
+  border-radius: 4px;
+  background: #2a2126;
+  font-size: 12px;
+  line-height: 1.5;
+}
+#missed-confirm,
+#truth-undo,
+#truth-edit { display: flex; flex-direction: column; gap: 6px; }
+#truth-undo[hidden] { display: none; }
+#truth-undo { border-color: #E69F00; background: #2a2519; }
+#truth-undo-button { border-color: #E69F00; color: #f0c268; }
+#truth-undo-button:hover { background: #E69F00; color: #1b1e22; }
+/* An id selector outranks the user agent's `[hidden] { display: none }`, so the attribute
+   has to be re-asserted or the panel never hides. Same pattern as #rubber and #stats. */
+#missed-confirm[hidden],
+#truth-edit[hidden] { display: none; }
+
+#truth-edit label { color: #b9c0c7; }
+.checkline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.checkline input { margin: 0; cursor: pointer; }
+#truth-class {
+  width: 100%;
+  padding: 3px 6px;
+  background: #22272e;
+  color: #e6e6e6;
+  border: 1px solid #333a42;
+  border-radius: 3px;
+}
+#truth-delete { border-color: #CC79A7; color: #e6b3d0; }
+#truth-delete:hover { background: #CC79A7; color: #1b1e22; }
+#truth-toggle[aria-pressed="true"] {
+  background: #CC79A7;
+  border-color: #CC79A7;
+  color: #1b1e22;
+}
+#missed-confirm label { color: #b9c0c7; }
+#missed-class {
+  width: 100%;
+  padding: 3px 6px;
+  background: #22272e;
+  color: #e6e6e6;
+  border: 1px solid #333a42;
+  border-radius: 3px;
+}
+.missed-actions { display: flex; gap: 6px; }
+.missed-actions button { padding: 3px 9px; }
+#missed-commit { border-color: #CC79A7; color: #e6b3d0; }
+#missed-commit:hover { background: #CC79A7; color: #1b1e22; }

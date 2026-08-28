@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import re
 import threading
 from pathlib import Path
@@ -21,8 +22,9 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from eval import suites
 from takeoff import candidates as cand
-from takeoff import classes, detect, doors, layout, raster, spaces
+from takeoff import classes, detect, doors, layout, raster, regions, schema, spaces
 
 # The drawing the project ships with. Anything else a person uploads lands beside it and is
 # treated identically -- the goal is to count symbols on ANY rasterized drawing, so a scan is
@@ -54,6 +56,9 @@ _candidates_lock = threading.Lock()
 _words: dict[tuple[str, int], list[layout.Word]] = {}
 _words_lock = threading.Lock()
 
+_regions: dict[tuple[str, int], list[regions.Region]] = {}
+_regions_lock = threading.Lock()
+
 # One reference entry per registered class, built from ITS OWN anchor page. Identification
 # needs these to work on any sheet but the anchor's, and takeoff/ cannot render a second page
 # -- that is this layer's job. Held per process; a class's reference never changes.
@@ -76,6 +81,31 @@ class DragBox(BaseModel):
     bbox_image_px: tuple[float, float, float, float] = Field(
         ..., description="x, y, w, h in DZI image pixels"
     )
+
+
+class TruthInstanceIn(BaseModel):
+    """One confirmed instance, in the tile pyramid's image pixels -- what the viewer works in."""
+
+    class_id: str
+    bbox_image_px: tuple[float, float, float, float]
+    label: str | None = None
+    occluded: bool = False
+
+
+class TruthRequest(BaseModel):
+    """The whole page's annotations, replacing whatever was stored.
+
+    Whole-page rather than incremental on purpose: the viewer holds the complete picture
+    while a person is working, and a partial update would leave no way to record that an
+    instance was DELETED without inventing a tombstone.
+    """
+
+    instances: list[TruthInstanceIn]
+
+    # Classes the annotator has passed over here, whether or not they found any. This is how
+    # "no elevation markers on T4" gets said at all -- without it that claim and an
+    # unannotated sheet are the same request, and the harness cannot grade either.
+    reviewed_classes: list[str] = []
 
 
 class CountRequest(BaseModel):
@@ -161,6 +191,45 @@ def _candidates_for(
     with _candidates_lock:
         _candidates[key] = (r, found)
     return r, found
+
+
+def _regions_for(number: int, doc: str | None = None) -> list[regions.Region]:
+    """The page's blocks, segmented once per page per process.
+
+    Keyed without the repair gap: repair closes gaps a few pixels wide inside a glyph and
+    cannot move a paragraph, so the segmentation is the same either way and one pass serves
+    every class.
+    """
+    source = _source(doc)
+    key = (str(source), number)
+    with _regions_lock:
+        hit = _regions.get(key)
+    if hit is not None:
+        return hit
+
+    r, found = _candidates_for(number, doc=doc)
+    found_regions = regions.segment(r, found)
+    with _regions_lock:
+        _regions[key] = found_regions
+    return found_regions
+
+
+def _counting_regions(
+    number: int, r: raster.Raster, selection_px: tuple[float, float] | None,
+    doc: str | None = None,
+) -> list[regions.Region] | None:
+    """The segmentation to count within, or None to count the whole sheet.
+
+    A person who drags a symbol out of the legend means it -- the legend is set type by every
+    measure, and gating it away would answer their gesture with nothing. So the gate is
+    dropped entirely when the selection came from inside a text block, rather than counting
+    on a pool the selection is not in.
+    """
+    found_regions = _regions_for(number, doc)
+    if selection_px is not None:
+        if regions.kind_at(found_regions, *selection_px) == regions.TEXT:
+            return None
+    return found_regions
 
 
 def _declared_dpi(source: Path) -> int:
@@ -414,6 +483,18 @@ def page_candidates(number: int, doc: str | None = None) -> dict:
         "size_band_in": list(cand.SYMBOL_BAND_IN),
         "count": len(found),
         "boxes": [_to_image_px(c.bbox_px, r) for c in found],
+        # What the count would actually consider. A candidate in the general notes is real
+        # ink and stays visible here -- it is simply not somewhere an instance can be.
+        "regions": [
+            {
+                "bbox_image_px": _to_image_px(g.bbox_px, r),
+                "kind": g.kind,
+                "components": g.components,
+                "uniformity": round(g.uniformity, 3),
+            }
+            for g in _regions_for(number, doc)
+        ],
+        "countable": len(regions.countable(_regions_for(number, doc), found)),
     }
 
 
@@ -517,13 +598,12 @@ def count(number: int, request: CountRequest, doc: str | None = None) -> dict:
         if selection.is_empty:
             return {"found": False, "reason": "no symbol-sized ink in that box"}
         if symbol is None:
-            symbol, identified_as = detect.identify(
-                selection, r, found, references=_class_library()
+            symbol, identified_as, r, found, selection = _identify_anywhere(
+                number, request.bbox_image_px, r, found, selection, doc
             )
         # Once the class is known, redo the selection on the segmentation THAT class wants.
-        # The identification above ran on the default one, which is fine -- it only had to
-        # recognise the symbol -- but the count has to be made on the ink the class's
-        # detector is calibrated against.
+        # Identification may already have landed on it, in which case this is a no-op; when
+        # a class_id was named outright it is what moves the count onto the right ink.
         if symbol.repair_gap_px is not None:
             r, found = _candidates_for(number, symbol.repair_gap_px, doc=doc)
             selection = cand.snap(found, _to_detection_px(request.bbox_image_px, r), dpi=r.dpi)
@@ -547,10 +627,27 @@ def count(number: int, request: CountRequest, doc: str | None = None) -> dict:
                 f"{symbol.id!r} anchors on sheet {symbol.anchor.page_index + 1}; "
                 f"select the symbol on this sheet to count it here",
             )
+        # The anchor is a selection like any other, so it has to be read on the segmentation
+        # THAT class wants -- the same move the selection branch makes above. At the default
+        # gap a swing arc merges with its jamb, stops being a thin component, and door_swing
+        # falls back to template matching: 15 detections instead of the arc path's 31.
+        if symbol.repair_gap_px is not None:
+            r, found = _candidates_for(number, symbol.repair_gap_px, doc=doc)
         entry = detect.build_entry(symbol, r, found)
         source = "anchor"
 
-    detections = detect.detect(r, found, [entry], keep_rejected=request.keep_rejected)
+    # Count inside the sheet's drawing blocks. On T4 that is 47% fewer candidates to group
+    # and size-gate; on T5, where the plan fills the sheet, it is 14% and changes nothing.
+    # Either way the counts are identical -- what it removes is work, not symbols.
+    centre = None
+    if request.bbox_image_px is not None:
+        box = _to_detection_px(request.bbox_image_px, r)
+        centre = (box[0] + box[2] / 2.0, box[1] + box[3] / 2.0)
+    scope = _counting_regions(number, r, centre, doc)
+
+    detections = detect.detect(
+        r, found, [entry], keep_rejected=request.keep_rejected, regions=scope
+    )
 
     # What the selection turned out to be. The person made one gesture either way, so the
     # panel says which reading it produced and why rather than leaving that invisible.
@@ -591,10 +688,53 @@ def count(number: int, request: CountRequest, doc: str | None = None) -> dict:
         "identified_as": identified_as,
         "registered": symbol.id in classes.REGISTRY,
         "template": template_info,
+        "scope": {
+            "regions": 0 if scope is None else len(scope),
+            "drawing_regions": 0 if scope is None else len(regions.drawing_regions(scope)),
+            "candidates": len(found) if scope is None else len(regions.countable(scope, found)),
+            "of": len(found),
+        },
         "diagnostics": detect.diagnose(r, found, entry, detections),
         "counts": detect.summarise(detections),
         "detections": [_detection_payload(d, r, _words_for(number, r, doc)) for d in detections],
     }
+
+
+def _identify_anywhere(
+    number: int, bbox_image_px, r: raster.Raster, found: list[cand.Candidate],
+    selection: cand.Selection, doc: str | None,
+):
+    """Identify a selection on every segmentation a registered class uses, not just one.
+
+    A class turns repair off because repair destroys the ink it is recognised BY. A door's
+    swing is a thin curve, and closing gaps merges it into the jamb beside it -- so on the
+    default segmentation a door arc is not a candidate at all, the profiler sees only the
+    keynote bubble and its letters, and reads the selection as a shape. Every door dragged
+    in the viewer came back "not a symbol registered yet", losing the class name, its caption
+    pattern and its calibrated thresholds, while `-m eval.suites` counted them correctly --
+    because the harness builds each class on its own segmentation and the server did not.
+
+    Segmentations are tried default-first, so nothing changes for a class that uses it, and
+    the first REGISTERED match wins. Falling back to the default reading keeps an unknown
+    symbol countable without a name, which is the behaviour identify() already promises.
+    """
+    gaps: list[int] = [cand.REPAIR_GAP_PX]
+    for symbol in classes.all_classes():
+        if symbol.repair_gap_px is not None and symbol.repair_gap_px not in gaps:
+            gaps.append(symbol.repair_gap_px)
+
+    library = _class_library()
+    for gap in gaps:
+        page, pool = _candidates_for(number, gap, doc=doc)
+        here = cand.snap(pool, _to_detection_px(bbox_image_px, page), dpi=page.dpi)
+        if here.is_empty:
+            continue
+        guess, why = detect.identify(here, page, pool, references=library)
+        if guess.id in classes.REGISTRY:
+            return guess, why, page, pool, here
+
+    guess, why = detect.identify(selection, r, found, references=library)
+    return guess, why, r, found, selection
 
 
 @app.get("/api/pages/{number}/crop")
@@ -636,4 +776,126 @@ def crop(number: int, x: float, y: float, w: float, h: float, pad: int = 10, doc
     return {
         "png": "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode(),
         "scale": scale,
+    }
+
+
+@app.get("/api/pages/{number}/grade")
+def read_grade(number: int, doc: str | None = None) -> dict:
+    """The last graded run of this page, in image pixels.
+
+    Read from disk rather than recomputed. Grading a sheet costs a render, a segmentation and
+    a full detection pass -- 17 s on T5, 53 s on T4 -- which is not something to do because
+    somebody pressed a button, and it would make the viewer a second place where a run
+    happens. `-m eval.suites --page N` is where a run happens. This shows what it found, and
+    carries `run_at` so a stale report can be recognised as one.
+    """
+    source = _source(doc)
+    path = suites.report_path(raster.source_hash(source), number)
+    if not path.exists():
+        return {
+            "graded": False,
+            "how": f"python -m eval.suites --page {number}"
+                   + ("" if doc is None else f" --source documents/{doc}"),
+        }
+
+    r, _ = _candidates_for(number, doc=doc)
+    run = json.loads(path.read_text(encoding="utf-8"))
+    graded = {}
+    for class_id, row in run.get("classes", {}).items():
+        # One flat list of boxes, each carrying what it is. The viewer draws off `kind` and
+        # never has to know which key of the report a box came from.
+        boxes = [
+            {"kind": "matched", "bbox_image_px": _to_image_px(m["detection_px"], r),
+             "truth_image_px": _to_image_px(m["truth_px"], r), "match": m["match"],
+             "occluded": m["occluded"], "label": m["label"], "distance_px": m["distance_px"]}
+            for m in row.get("matched", ())
+        ]
+        boxes += [
+            {"kind": "missed", "bbox_image_px": _to_image_px(m["truth_px"], r),
+             "occluded": m["occluded"], "label": m["label"]}
+            for m in row.get("missed", ())
+        ]
+        boxes += [
+            {"kind": "spurious", "bbox_image_px": _to_image_px(m["detection_px"], r),
+             "match": m["match"], "variant": m["variant"]}
+            for m in row.get("spurious", ())
+        ]
+        boxes += [
+            {"kind": "in_review", "bbox_image_px": _to_image_px(m["detection_px"], r),
+             "match": m["match"], "reason": m["reason"]}
+            for m in row.get("in_review", ())
+        ]
+        graded[class_id] = {
+            **{k: v for k, v in row.items()
+               if k not in ("matched", "missed", "spurious", "in_review")},
+            "boxes": boxes,
+        }
+
+    return {
+        "graded": True,
+        "page": run.get("page"),
+        "source": run.get("source"),
+        "run_at": run.get("run_at"),
+        "not_graded": run.get("not_graded", []),
+        "classes": graded,
+    }
+
+
+@app.get("/api/pages/{number}/truth")
+def read_truth(number: int, doc: str | None = None) -> dict:
+    """Reviewed annotations for this page, in image pixels.
+
+    `annotated` distinguishes a page nobody has looked at from one confirmed to be empty.
+    They are different answers: the first cannot be scored, the second scores a detector that
+    reports anything at all.
+    """
+    source = _source(doc)
+    r, _ = _candidates_for(number, doc=doc)
+    truth = schema.load_truth(raster.source_hash(source), number)
+    if truth is None:
+        return {"annotated": False, "instances": []}
+
+    return {
+        "annotated": True,
+        "document": truth.document,
+        "reviewed_classes": list(truth.graded_classes),
+        "instances": [
+            {
+                "class_id": i.class_id,
+                "label": i.label,
+                "occluded": i.occluded,
+                "source": i.source,
+                "bbox_image_px": _to_image_px(i.bbox_px, r),
+            }
+            for i in truth.instances
+        ],
+    }
+
+
+@app.post("/api/pages/{number}/truth")
+def write_truth(number: int, request: TruthRequest, doc: str | None = None) -> dict:
+    """Store this page's annotations. The tool is the annotation tool; nothing is typed."""
+    source = _source(doc)
+    r, _ = _candidates_for(number, doc=doc)
+
+    truth = schema.GroundTruth(
+        document=raster.source_hash(source),
+        page=number,
+        dpi=r.dpi,
+        reviewed_classes=tuple(sorted(set(request.reviewed_classes))),
+        instances=tuple(
+            schema.TruthInstance(
+                class_id=i.class_id,
+                bbox_px=_to_detection_px(i.bbox_image_px, r),
+                label=i.label,
+                occluded=i.occluded,
+            )
+            for i in request.instances
+        ),
+    )
+    path = schema.save_truth(truth)
+    return {
+        "saved": str(path),
+        "instances": len(truth.instances),
+        "reviewed_classes": list(truth.graded_classes),
     }

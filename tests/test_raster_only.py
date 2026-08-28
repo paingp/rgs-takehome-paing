@@ -30,6 +30,7 @@ DETECTION_MODULES = [
     "banding",
     "schema",
     "classes",
+    "regions",
 ]
 
 

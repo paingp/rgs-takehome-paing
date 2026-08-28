@@ -13,7 +13,7 @@ end-to-end, then stop and test before the next.
 
   Gate 1  foundations + viewer                      DONE
   Gate 2  symbol selection UI                        DONE
-  Gate 3  ground truth on T5                         PENDING - annotations are with Paing
+  Gate 3  ground truth on T5                         TOOLING DONE - awaiting annotation
   Gate 4  first symbol end-to-end                    DONE - interior elevation marker
   Gate 5     single swing door                       DONE - parametric, see doors.py
              selection is one gesture for every symbol; the DETECTOR is measured from what
@@ -183,10 +183,55 @@ labelled bucket, never dropped -- that is not implemented for scale, and tuning 
 margin (best T4 chair 0.343, weakest T5 door 0.394) over two sheets. Re-derive it from ground
 truth before trusting it.
 
-**Open: E\T9 on T5 is still missed** -- a leader arrow is drawn through it, merging it into a
-blob that fails the size gate. Ink repair handles a line that suppression REMOVES (A/T9, now
-counted); it cannot help when the line is diagonal and therefore kept. Separating a symbol from
-foreign ink drawn across it is unsolved.
+**DONE: both `RE/EX` doors in room 218 on T5 are counted.** Paing found them missing. It was
+not a candidate-generation failure -- the candidate exists, 935 ink px at 2.9% fill -- but an
+arc-SELECTION failure: `find_arc` ranks hypotheses by inlier count at every stage, and each of
+these doors has a keynote ellipse touching its swing and sharing its component, so the sweep
+returns the ellipse's top edge at stroke ratio 2.85 and `Arc.quality` refuses it. `find_swing`
+peels the refused fit's ink and re-sweeps, up to 3 rounds. T5 29 -> 31 counted, both at radius
+117 px = 3.1 ft, matching the sheet's other 29. T4 unchanged at 25, so no chair became a door.
+Ranking by quality instead was tried and LOSES 15 of 35 arcs -- quality is scale-free, so any
+small clean arc scores 1.000. Do not revisit that one.
+
+**DONE: sheet furniture is out of the counting pool.** `takeoff/regions.py` segments a sheet
+into blocks and classifies each as drawing or set type from component-height uniformity
+(viewports 0.31-0.48, notes columns 0.66-0.97, gate 0.57). On T4 that is 47% of candidates;
+on T5 14%. Counts identical on both. The T4 template path goes 1.08s -> 0.49s; the arc path
+gains nothing because thinness already excluded text. viewport2.py's 150 chars/in2 classifier
+does NOT transfer -- it calls every block on both sheets a drawing. Measured off the raster
+only, never the text layer, or a PDF and a scan of one sheet would get different candidates.
+
+**DONE: a door dragged in the viewer is recognised as a door.** Found while verifying the
+above. `/count` identified a selection only on the DEFAULT segmentation, and the door class
+turns repair off precisely because repair merges its thin arc into the jamb -- so on the
+default pool a door's arc is not a candidate, the profiler saw only the keynote bubble, and
+every door came back "not a symbol registered yet" with generic thresholds instead of the
+class's. `-m eval.suites` was right all along because it builds each class on its own ink.
+`_identify_anywhere` now tries each registered class's segmentation, default first.
+
+**Open: peeling costs 2.4x on the arc path.** T5 5.5s -> 13.1s, T4 19.6s -> 52.7s for the raw
+sweep. Only blobs that fail their first fit peel, so the 29 easy doors are free. If it needs
+to come down: skip peeling when the first arc already explains most of the blob, or cap the
+rounds at 2 and give up the second RE/EX door.
+
+**DONE: an occluded symbol is found inside the blob it is fused to.** `detect.fused_windows`
+slides the class's own footprint across any blob too big to BE the symbol and keeps the best
+window. This was the E\T9 case, and the diagnosis it was filed under was wrong: the marker is
+not shattered into too many pieces, it is welded to the leader drawn through it -- one blob of
+116x146 px where a marker is 44x129, which the size gate refuses, so nothing ever scored it and
+no threshold could have reached it. Whole-blob 0.504, best window 0.960. T5 markers went 9 -> 10
+counted with precision still 1.000, and occluded recall went 0.000 -> 0.500, the first occluded
+instance the tool has ever found. Costs ~15 s on T4, nothing measurable on T5.
+
+Two things were tried first and reverted, both aimed at the wrong failure: growing groups past
+MAX_GROUP_PARTS when the pieces shared a raw-ink component, and completing an undersized
+fragment by adding neighbours that explain more of the template. Neither moved a single
+instance. Greedy growth adds the neighbour that costs the least bounding box, which for a
+symbol in pieces walks up the nearest wall -- the 4-part group at the (9185, 2299) marker grew
+to (9189, 2241, 20, 74), away from the glyph.
+
+**Open: the other occluded marker sits in review at 0.831.** Found now, not counted -- see the
+gate measurement below.
 
 **Superseded: A/T9 on T5.** It is a larger marker than the registered template and
 falls outside the 30% size gate. `SymbolClass.scales` was added for exactly this and is left at
@@ -194,6 +239,25 @@ falls outside the 30% size gate. `SymbolClass.scales` was added for exactly this
 than MAX_GROUP_PARTS pieces. Wants ground truth before further tuning; do not chase it by
 loosening thresholds, which measurably makes the sheet worse (30% -> 60% tolerance took the
 count from 8 to 4).
+
+**Open: the counting gates, now measured rather than eyeballed.** With T4 and T5 annotated,
+every detection above the review floor can be scored against truth:
+
+| class | real instances | worst real | best non-instance | today's gate | best gate |
+|---|---|---|---|---|---|
+| `door_swing` | 55 | 0.751 | **1.000** | 0.72 | 0.751 -> 55 TP, 1 FP, 0 FN |
+| `elev_marker` | 12 | 0.831 | 0.825 | 0.90 | 0.83 -> 12 TP, 0 FP, 0 FN |
+
+Two readings, and they point opposite ways. The door gate is already right and moving it can
+achieve nothing: the one false positive on T4 scores a **perfect 1.000**, so no threshold
+anywhere separates it -- it is a shape problem, not a confidence problem. The marker gate at
+0.90 is measurably too high: it costs 2 of 12 real instances, both of which sit in review.
+0.83 scores perfectly on both sheets, but the gap under it is **0.006** -- five of the eleven
+non-instances score 0.800-0.825, and four of those appear at IDENTICAL coordinates on both
+sheets, which means they are sheet furniture that `regions.segment` is not excluding. Widening
+that gap by fixing the regions is the robust move; dropping the gate onto a 0.006 margin is
+not. Left at 0.90 deliberately, with the two real instances visible in review, until the
+furniture is out of the pool. Do not move it without re-running this measurement.
 
 **Not a marker:** the two `D/T10` strings on T5 are cross-references inside a note ("SEE 1 &
 D/T10"), not callouts. A sheet reference in the text layer does not imply a marker, so the count

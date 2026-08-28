@@ -79,6 +79,17 @@ OCCUPANCY_WEIGHT = 4
 # The arc must be a real part of the blob, not six pixels of coincidence on a big one.
 MIN_INLIERS = 55
 
+# How many times a blob may be re-swept after its ink has been peeled back. The sweep ranks
+# hypotheses by inlier count, so when something denser than the swing shares the component
+# the densest circle is not the door: both RE/EX doors in room 218 on T5 have a keynote
+# ellipse touching the swing, and the ellipse's top edge wins at stroke_ratio 2.8.
+#
+# Peeling deletes the ink of a fit that was refused and sweeps what is left. Measured on T5
+# the top door needs one retry and the bottom one needs two, so three fits is the budget; a
+# fourth found nothing anywhere on T5 or T4. Blobs whose first fit is accepted -- every one
+# of the 29 doors already counted -- never peel and cost exactly what they cost today.
+PEEL_ROUNDS = 3
+
 # Ink pixels per unit of arc length. A drafted arc is ONE STROKE wide, so a genuine swing
 # lands near 1.2 whatever else is in its blob; a circle threaded through a thick or clustered
 # mass -- a keynote ellipse, a corner of leader lines -- collects far more. Measured on T5:
@@ -373,12 +384,71 @@ def thin_enough(candidate: Candidate, max_fill: float = MAX_FILL) -> bool:
     return candidate.area_px / max(w * h, 1) <= max_fill
 
 
+def _peeled(mask: np.ndarray, bbox: BBox, arc: Arc) -> np.ndarray:
+    """The blob with one fitted circle's ink removed.
+
+    A stroke either side of the circle, matching the inlier tolerance the fit used, so what
+    comes out is exactly what the refused fit was measuring and nothing more.
+    """
+    ys, xs = np.nonzero(mask)
+    dist = np.hypot(xs + bbox[0] - arc.centre_px[0], ys + bbox[1] - arc.centre_px[1])
+    kill = np.abs(dist - arc.radius_px) <= INLIER_TOL_PX + 1
+    out = mask.copy()
+    out[ys[kill], xs[kill]] = False
+    return out
+
+
+def find_swing(
+    mask: np.ndarray,
+    bbox: BBox,
+    dpi: float,
+    radius_band_in: tuple[float, float] = RADIUS_BAND_IN,
+    page_ink: np.ndarray | None = None,
+    require_anchor: bool | None = None,
+    min_quality: float | None = None,
+) -> Arc | None:
+    """The best arc in a blob that reads as a swing, looking past ink that is not one.
+
+    `find_arc` returns the circle the most ink sits on. That is the right first guess and the
+    wrong final answer when something denser than the swing shares the component: the sweep
+    locks onto the dense thing, `Arc.quality` correctly scores it as not-a-stroke, and the
+    door is lost with no indication that a good arc was sitting underneath. Peeling the
+    refused fit's ink away and sweeping again is what finds it.
+
+    `min_quality` of None means do not peel at all, which is the single-pass behaviour and
+    what a caller measuring a blob rather than counting one wants. When peeling fails the
+    FIRST fit is returned, so a blob that cannot be rescued reports exactly what it reports
+    without this -- the caller's own gates then refuse it as they always did.
+
+    Deterministic: `find_arc` sweeps a fixed grid and peeling is a fixed rule over its
+    output, so the same ink gives the same answer on every run (decision 10).
+    """
+    if min_quality is None:
+        return find_arc(mask, bbox, dpi, radius_band_in, page_ink)
+
+    working = mask
+    first: Arc | None = None
+    for _ in range(PEEL_ROUNDS):
+        arc = find_arc(working, bbox, dpi, radius_band_in, page_ink)
+        if arc is None:
+            break
+        if first is None:
+            first = arc
+        if arc.quality >= min_quality and is_swing(arc, bbox, require_anchor):
+            return arc
+        working = _peeled(working, bbox, arc)
+        if int(working.sum()) < MIN_INLIERS:
+            break
+    return first
+
+
 def swings_in(
     candidates: list[Candidate],
     dpi: float,
     radius_band_in: tuple[float, float] = RADIUS_BAND_IN,
     page_ink: np.ndarray | None = None,
     require_anchor: bool | None = None,
+    min_quality: float | None = None,
 ) -> list[tuple[Candidate, Arc]]:
     """Every door swing among a list of candidates, in a stable order.
 
@@ -394,7 +464,9 @@ def swings_in(
             continue
         if not thin_enough(c):
             continue
-        arc = find_arc(c.mask, c.bbox_px, dpi, radius_band_in, page_ink)
+        arc = find_swing(
+            c.mask, c.bbox_px, dpi, radius_band_in, page_ink, require_anchor, min_quality
+        )
         if is_swing(arc, c.bbox_px, require_anchor):
             out.append((c, arc))
 

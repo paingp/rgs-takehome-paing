@@ -73,7 +73,7 @@ def ink_layers(
     raster: Raster,
     ink_threshold: int = INK_THRESHOLD,
     structure_length_in: float = STRUCTURE_LENGTH_IN,
-    repair_gap_px: int = REPAIR_GAP_PX,
+    repair_gap_px: int | None = REPAIR_GAP_PX,
 ) -> InkLayers:
     """Split ink into structure and symbols. Ported from scratch/spike6.py.
 
@@ -96,12 +96,15 @@ def ink_layers(
     structure = cv2.dilate(horizontal | vertical, np.ones((3, 3), np.uint8)).astype(bool)
     symbols = binary & ~structure
 
-    if repair_gap_px > 0:
+    # None is how a class says "whatever the default is" -- accepted here so no caller has
+    # to translate it, and `SymbolClass.repair_gap_px` can stay tri-state.
+    gap = REPAIR_GAP_PX if repair_gap_px is None else repair_gap_px
+    if gap > 0:
         # Close small gaps in the symbol layer, then keep only the closed pixels that were
         # real ink. A gap left by a line crossing a glyph gets its ink back; a gap the
         # drawing intended -- a marker and its label 14 px apart -- is wider than this and
         # stays open.
-        kernel = np.ones((repair_gap_px, repair_gap_px), np.uint8)
+        kernel = np.ones((gap, gap), np.uint8)
         closed = cv2.morphologyEx(symbols.astype(np.uint8), cv2.MORPH_CLOSE, kernel).astype(bool)
         symbols = symbols | (closed & binary)
 

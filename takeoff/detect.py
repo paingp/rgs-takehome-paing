@@ -20,7 +20,7 @@ from typing import Sequence
 
 import numpy as np
 
-from takeoff import banding, classes, doors, scoring, templates
+from takeoff import banding, classes, doors, regions as regions_mod, scoring, templates
 from takeoff.candidates import BBox, Candidate, snap
 from takeoff.schema import Raster
 from takeoff.scoring import Scorer, StrokeCoverageScorer
@@ -41,6 +41,24 @@ GROUP_GAP_FACTOR = 0.08
 # and was counted a second time under that marker's own label. Four leaves headroom over what
 # the sheet actually needs and still refuses a chain of characters.
 MAX_GROUP_PARTS = 4
+
+# A blob may be bigger than the symbol without being something else: a line drawn across a
+# marker is one component with it, so the symbol arrives fused to its occluder. Both occluded
+# markers on T5 are like this -- 77x153 and 116x146 px against a 44x129 marker -- and both
+# were invisible to every threshold because an oversized blob never reaches scoring at all.
+#
+# So an oversized blob gets the symbol looked for INSIDE it. The bound is on how much foreign
+# ink is worth searching through: past a few times the symbol's own footprint this stops being
+# an occluded instance and starts being a search for an accident in a wall.
+MAX_FUSED_FOOTPRINTS = 4.0
+
+# How much of the template's ink a blob must hold before the search is worth running. A symbol
+# fused with a line still carries all of its own ink; this only excludes specks.
+FUSED_INK_SHARE = 0.5
+
+# Coarse pass, then +/- one stride at single-pixel steps around the best window. Line work is
+# 2-3 px wide at 300 DPI, so a coarse step of 3 cannot step over the symbol.
+FUSED_STRIDE_PX = 3
 
 
 @dataclass(frozen=True)
@@ -119,6 +137,19 @@ class Detection:
         return (self.bbox_px[2], self.bbox_px[3])
 
     @property
+    def centre_px(self) -> tuple[float, float]:
+        """The middle of the box, which is NOT `centroid_px`.
+
+        `centroid_px` is where the ink is; this is where the instance is. For a swing arc
+        they are far apart -- the ink of a quarter circle sits along the curve, up to 59 px
+        from the box centre on T5's doors -- and grading compared one against the other until
+        it was found: the door at (9412, 2894) came back as a false positive AND a miss, 73 px
+        out on ink centroids and 19 px out on box centres, against a 66 px tolerance.
+        """
+        x, y, w, h = self.bbox_px
+        return (x + w / 2.0, y + h / 2.0)
+
+    @property
     def asymmetry(self) -> float:
         """How lopsided the fit is. Large means one shape contains the other."""
         return abs(self.forward - self.backward)
@@ -192,7 +223,12 @@ def profile_selection(
     for c in sorted(selection.members, key=lambda c: -c.area_px):
         if not doors.thin_enough(c):
             continue
-        arc = doors.find_arc(c.mask, c.bbox_px, dpi, PROFILE_BAND_IN, page_ink)
+        # Peeling matters here too, and for the same reason it matters when counting: a
+        # person dragging a box round a door whose keynote bubble sits on its swing would
+        # otherwise have the selection read as a shape, and get the template detector.
+        arc = doors.find_swing(
+            c.mask, c.bbox_px, dpi, PROFILE_BAND_IN, page_ink, min_quality=MIN_ARC_QUALITY
+        )
         if not doors.is_swing(arc, c.bbox_px):
             continue
         if arc.quality < MIN_ARC_QUALITY:
@@ -441,6 +477,12 @@ def candidate_groups(
     sank clustering in the spikes. A piece joins only if it is within a stroke of the group,
     and only if the group still fits inside the template's footprint afterwards. Single
     components are groups of one, so the simple case is unchanged.
+
+    Deliberately cheap and deliberately blind to the template: this runs for every component
+    on the sheet. What it cannot do is assemble a symbol from more pieces than the bound, and
+    it should not try -- greedy growth adds whichever neighbour costs the least bounding box,
+    which for a symbol in pieces walks up the nearest wall rather than towards the rest of the
+    glyph. A symbol its occluder FUSED with rather than broke is handled by `fused_windows`.
     """
     if not candidates:
         return []
@@ -498,12 +540,84 @@ def candidate_groups(
     return groups
 
 
+def fused_windows(
+    candidate: Candidate, entry: ClassEntry, dpi: int, scorer: "Scorer"
+) -> tuple[scoring.Score, BBox] | None:
+    """Look for the symbol INSIDE a blob too big to be the symbol.
+
+    Occlusion on these sheets is usually not a symbol broken into pieces. It is a symbol
+    welded to whatever crosses it: line suppression removes long horizontal and vertical runs
+    only, so a leader drawn at 50 degrees through a marker stays, joins its component, and the
+    result is one blob 116x146 px where the marker is 44x129. Nothing downstream can see it --
+    the size gate refuses the blob, so it is never scored, and there is no threshold anywhere
+    that could have recovered it. Both occluded markers on T5 failed exactly this way.
+
+    Sliding the template's own footprint across the blob asks the right question of it: is
+    there a window in here that IS the symbol? Measured on T5: the blob at (6518, 2506) scores
+    0.504 whole and 0.960 at its best window; (9189, 2291) scores 0.711 whole and 0.830.
+
+    This is the expensive move in the pipeline, so it runs on oversized blobs alone -- a few
+    dozen on a sheet, against several thousand components.
+    """
+    if not entry.bank:
+        return None
+    height, width = candidate.mask.shape
+    best: tuple[scoring.Score, BBox] | None = None
+
+    def look(fw: int, fh: int, xs: range, ys: range) -> None:
+        nonlocal best
+        for dy in ys:
+            for dx in xs:
+                sub = candidate.mask[dy:dy + fh, dx:dx + fw]
+                if not sub.any():
+                    continue
+                score = scoring.best_variant(sub, entry.bank, dpi, scorer)
+                box = (candidate.bbox_px[0] + dx, candidate.bbox_px[1] + dy, fw, fh)
+                if best is None or score.match > best[0].match:
+                    best = (score, box)
+
+    for fw, fh in entry.footprints:
+        if fw > width or fh > height:
+            continue
+        look(fw, fh, range(0, width - fw + 1, FUSED_STRIDE_PX),
+             range(0, height - fh + 1, FUSED_STRIDE_PX))
+        if best is None:
+            continue
+        # Single-pixel refinement around the coarse winner. The window is the box that gets
+        # reported and graded, so a 3 px offset is worth removing.
+        _, (bx, by, bw, bh) = best
+        if (bw, bh) != (fw, fh):
+            continue
+        ox, oy = bx - candidate.bbox_px[0], by - candidate.bbox_px[1]
+        look(
+            fw, fh,
+            range(max(0, ox - FUSED_STRIDE_PX), min(width - fw, ox + FUSED_STRIDE_PX) + 1),
+            range(max(0, oy - FUSED_STRIDE_PX), min(height - fh, oy + FUSED_STRIDE_PX) + 1),
+        )
+    return best
+
+
+def fused_blobs(candidates: Sequence[Candidate], entry: ClassEntry) -> list[Candidate]:
+    """Blobs big enough to hide the symbol, small enough to be worth searching."""
+    if entry.template is None or not entry.bank:
+        return []
+    ink_floor = FUSED_INK_SHARE * max(int(v.mask.sum()) for v in entry.bank)
+    area_cap = MAX_FUSED_FOOTPRINTS * max(a * b for a, b in entry.footprints)
+    return [
+        c for c in candidates
+        if c.area_px >= ink_floor
+        and not _fits_footprint(c.bbox_px, entry)
+        and c.bbox_px[2] * c.bbox_px[3] <= area_cap
+    ]
+
+
 def detect(
     raster: Raster,
     candidates: Sequence[Candidate],
     entries: Sequence[ClassEntry],
     scorer: Scorer | None = None,
     keep_rejected: bool = False,
+    regions: Sequence["regions_mod.Region"] | None = None,
 ) -> list[Detection]:
     """Score every candidate against every class and assign it to at most one.
 
@@ -511,8 +625,19 @@ def detect(
     margin is the distance to the *next class*, not to the next orientation of the same one.
     Orientations of one template are near-duplicates of each other, so a margin measured
     across them would be ~0 for every hit and would reject the entire sheet.
+
+    `regions` narrows the pool to ink that is not set type. A sheet carries general notes, a
+    legend and a title block, and none of them can hold an instance of anything -- on T4 that
+    is 47% of the candidates, grouped and size-gated and swept for nothing. Passing None
+    counts the whole sheet, which is what a caller with no segmentation should get.
+
+    The filter is here rather than in `find_candidates` on purpose: SELECTION still sees the
+    whole sheet, so a legend entry can be dragged and a template built from it. What this
+    narrows is only what gets counted.
     """
     scorer = scorer or StrokeCoverageScorer()
+    if regions is not None:
+        candidates = regions_mod.countable(list(regions), candidates)
 
     # Score every plausible grouping, then let them compete for the ink they claim. Without
     # that, the A/T10 marker -- two components after suppression -- is counted three times:
@@ -527,7 +652,8 @@ def detect(
             page_ink = doors.page_ink_from(raster.gray)
             anchored = entry.profile.anchored if entry.profile else None
             for candidate, arc in doors.swings_in(
-                list(candidates), raster.dpi, band, page_ink, anchored
+                list(candidates), raster.dpi, band, page_ink, anchored,
+                min_quality=entry.symbol.counted_at,
             ):
                 score = scoring.Score(
                     match=arc.quality,
@@ -545,6 +671,17 @@ def detect(
             best = scoring.best_variant(mask, entry.bank, raster.dpi, scorer)
             if best.match > 0:
                 scored.append((best.match, entry, best, members, bbox))
+
+        # Then the instances fused to whatever crosses them. The loop above cannot see these
+        # at all -- the blob is oversized, so it never passes the size gate and is never
+        # scored -- and they are most of what occlusion means on these sheets.
+        for blob in fused_blobs(candidates, entry):
+            found = fused_windows(blob, entry, raster.dpi, scorer)
+            if found is None:
+                continue
+            window, box = found
+            if window.match > 0:
+                scored.append((window.match, entry, window, (blob,), box))
 
     scored.sort(key=lambda row: (-row[0], len(row[3])))
 

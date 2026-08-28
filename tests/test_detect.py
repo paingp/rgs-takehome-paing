@@ -197,17 +197,22 @@ def test_the_anchor_rebuilds_the_marker_the_selection_would_give(marker_entry) -
 
 
 def test_elevation_marker_end_to_end_on_t5(t5, marker_entry) -> None:
-    """Seven instances clear the counted gate; the best non-marker sits far below it.
+    """Ten instances clear the counted gate, and all ten are real.
 
-    These numbers are the detector's, not ground truth -- T5's annotations live with Paing.
-    The test pins the *separation*, which is the property that would silently rot: the
-    counted set must stay well clear of the best thing that is not a marker.
+    These numbers are no longer the detector's own: T5 is annotated, and `-m eval.suites
+    --page 5` scores this class 10 TP / 0 FP / 2 FN against 12 reviewed instances. The test
+    pins the *separation*, which is the property that would silently rot -- the counted set
+    must stay well clear of the best thing that is not a marker.
+
+    Nine before `fused_windows`. The tenth is the marker at (6552, 2509) that a leader line
+    is drawn through: its blob is 116x146 px against a 44x129 marker, so the size gate
+    refused it and nothing scored it at all. Searched inside, it scores 0.961.
     """
     r, found = t5
     results = detect.detect(r, found, [marker_entry], keep_rejected=True)
 
     counted = [d for d in results if d.status is banding.Status.COUNTED]
-    assert len(counted) == 9, [(d.match, d.bbox_px) for d in counted]
+    assert len(counted) == 10, [(d.match, d.bbox_px) for d in counted]
     assert all(d.match >= 0.90 for d in counted)
 
     # One of them is the A/T9 marker with a line drawn through it. Ink repair is what makes
@@ -315,7 +320,10 @@ def test_dragging_in_the_label_does_not_change_the_count(t5) -> None:
         entry = detect.entry_from_selection("elev_marker", selection, page_index=r.page_index)
         runs[label] = [d.id for d in detect.detect(r, found, [entry])]
 
-    assert len(runs["glyph only"]) == 13
+    # 18, of which 13 come from whole components and 5 from windows inside blobs too big
+    # to be a marker. What the test is for is the agreement below, not the count: all three
+    # drags must produce the SAME instances, whatever the detector currently finds.
+    assert len(runs["glyph only"]) == 18
     assert runs["with label"] == runs["glyph only"] == runs["generous"]
 
 
@@ -569,7 +577,7 @@ def test_a_marker_selection_is_never_counted_as_a_door(t5) -> None:
     )
     counted = [d for d in right if d.status is banding.Status.COUNTED]
     assert symbol.id == "elev_marker"
-    assert len(counted) == 9
+    assert len(counted) == 10
     assert {d.class_id for d in right} == {"elev_marker"}
 
 
