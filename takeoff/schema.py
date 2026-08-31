@@ -55,7 +55,7 @@ class InkLayers:
 
     @property
     def removed_fraction(self) -> float:
-        """Share of ink that line suppression took out. ~0.81 on E4, per PROGRESS.md."""
+        """Share of ink that line suppression took out. ~0.81 on E4, per docs/ENGINEERING-LOG.md."""
         total = int(self.binary.sum())
         return 0.0 if total == 0 else 1.0 - int(self.symbols.sum()) / total
 

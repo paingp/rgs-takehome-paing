@@ -1,6 +1,15 @@
-# Symbol Spotter — session handoff
+# Symbol Spotter — engineering log
 
-Last updated 2026-08-26. Research + spikes complete; no production code yet. Ready to build.
+> **This is a working log, not documentation.** It is the record of what was measured, what was
+> tried, and what was tried and abandoned, written as the work happened and appended to rather
+> than tidied. Entries near the top are the oldest; the newest work is further down.
+>
+> If you want to know **what the tool is and how to run it**, read [`../README.md`](../README.md).
+> If you want to know **how it works and why it was built this way**, read
+> [`../ARCHITECTURE.md`](../ARCHITECTURE.md). Come here for the evidence behind a specific
+> number, or to find out whether an idea has already been falsified.
+
+Research + spikes complete; no production code yet. Ready to build.
 
 **Executable plan:** `C:\Users\paing\.claude\plans\crystalline-gliding-bear.md`  <- start here
 **Narrative version:** https://claude.ai/code/artifact/4fd71584-3fad-4549-bfb0-d67e9bb2f833
@@ -792,6 +801,90 @@ sheet it POINTS AT. I wrote the first version of these notes with the two swappe
 
 ---
 
+## Ranking arcs by quality: falsified twice, and now measured properly
+
+Paing saw doors going undetected on the URI sheets and thought the arcs were losing pixels to
+low resolution. **It is not resolution**, and that is worth stating first because it is cheap
+to test and easy to believe: rendering the same sheet at 600 DPI gives an identical answer.
+
+```
+                300 DPI    600 DPI
+radius          144 px     282 px      -- the same 0.48 in
+occupancy       0.769      0.769
+stroke_ratio    1.708      1.685
+quality         0.191      0.200
+```
+
+The pixels are found. The wrong circle is chosen, and then thrown away.
+
+### The diagnosis, which stands
+
+`find_arc` ranks hypotheses by **inlier count**; `is_swing` and the banding gate judge by
+**`Arc.quality`**. Ranking on one and gating on the other means the arc that would pass is
+discarded before the gate runs. Every viable radius on URI's room-113 door:
+
+```
+radius  inliers  quality
+    87      406    0.082   <- returned: most inliers
+   105      373    0.239
+   153      196    0.350   <- best quality, never considered
+```
+
+Note that **nothing here reaches the 0.5 gate**, so this door was unreachable either way. The
+disagreement is real; it is not sufficient on its own.
+
+### The fix, and why it is wrong
+
+Ranking by quality among hypotheses that already clear `MIN_INLIERS` looked decisive in
+isolation -- over 40 components a side, T5 went 25 -> 39 clearing the gate and URI 10 -> 32,
+and sheet-wide `swings_in` on URI went from 25 of 80 arcs passing to 76 of 76.
+
+**It fails the moment it is run through the pipeline instead of measured beside it.** Eight
+tests in `tests/test_doors.py` break, and they break in the two ways that matter:
+
+* **Precision.** T4 counts 39 doors where 29 exist -- the chairs come back.
+* **Stability.** On T5, `test_selecting_any_door_gives_the_same_count` goes from one answer to
+  `{1, 39}`. Quality is scale-free, so the sweep starts returning a small clean curve *inside*
+  the door blob; the radius measured from the selection is then wrong, and the sheet-wide
+  sweep hunts for the wrong size.
+
+A strictly smaller variant -- keep the centre ranked by inliers, choose only among the four
+radii at that centre by quality -- is **worse**, breaking even
+`test_a_quarter_circle_is_found_with_its_radius_and_centre`.
+
+**Both reverted.** This is the second time; the earlier note said *"quality is scale-free, so
+any small clean arc scores 1.000. Do not revisit that one."* That note was right and the
+`MIN_INLIERS >= 55` floor is not the safeguard I took it for -- a 55-pixel curve is still tiny
+next to a door. This entry supersedes it with the specific failures, so a third attempt costs
+nothing to rule out.
+
+### What the fix actually needs
+
+Not a ranking tweak. The downstream gates all assume `find_arc` returns the *dominant* circle
+by evidence, so changing what it returns breaks `is_swing`, the radius measured from a
+selection, and `ARC_SPANS_SELECTION` at once. Either `find_arc` returns **several** ranked
+hypotheses and lets the caller choose -- which is the honest interface, since only the caller
+knows whether it is profiling a selection or sweeping a sheet -- or the gates stop judging an
+arc by the blob it landed in, which is the T4 work already scoped above. The two are the same
+piece of work approached from opposite ends, and it is a session on its own.
+
+### Delivered instead: an under-resolved sheet now says so
+
+`documents/test.png` is a 993x349 screenshot of a whole 36-inch sheet: **27.6 DPI of paper**,
+where a door arc is 7.8 px and the detector needs 72-156. `MIN_INLIERS` alone forbids it. No
+change makes that file work -- the information is not in it -- but returning a silent zero
+made it look like a detector failure. `detect.too_coarse` names it:
+
+> This image is 993x349 px, which at 300 DPI is only 3.3x1.2 in of paper -- smaller than any
+> drawing sheet, so it is a full sheet captured at too low a resolution. Across a 36 in sheet
+> it works out at about 28 DPI, where this symbol's 0.24-0.52 in radius is roughly 7 px and
+> the detector needs 72-156. Re-export the sheet at a higher resolution, or open the PDF.
+
+Keyed on physical size alone, so `detect.py` stays raster-only and a real sheet -- 36x24 in at
+its own DPI -- can never trip it.
+
+---
+
 ## Generalisation, step 2: a drawing set by another firm entirely
 
 Step 1 was M2 -- a different consultant, the same PDF. This is the first drawing the tool has
@@ -1176,7 +1269,9 @@ returns the ellipse's top edge at stroke ratio 2.85 and `Arc.quality` refuses it
 peels the refused fit's ink and re-sweeps, up to 3 rounds. T5 29 -> 31 counted, both at radius
 117 px = 3.1 ft, matching the sheet's other 29. T4 unchanged at 25, so no chair became a door.
 Ranking by quality instead was tried and LOSES 15 of 35 arcs -- quality is scale-free, so any
-small clean arc scores 1.000. Do not revisit that one.
+small clean arc scores 1.000. Do not revisit that one. **Revisited anyway and reverted again;
+see "Ranking arcs by quality: falsified twice" for the specific failures and for what the fix
+would actually take.**
 
 **DONE: sheet furniture is out of the counting pool.** `takeoff/regions.py` segments a sheet
 into blocks and classifies each as drawing or set type from component-height uniformity

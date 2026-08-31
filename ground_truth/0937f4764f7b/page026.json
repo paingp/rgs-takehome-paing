@@ -9,234 +9,6 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        3783,
-        2443,
-        36,
-        30
-      ],
-      "label": "G",
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3781,
-        1815,
-        38,
-        26
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        1150,
-        1579,
-        40,
-        29
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        1149,
-        1682,
-        41,
-        30
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3368,
-        2443,
-        25,
-        38
-      ],
-      "label": null,
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3440,
-        2442,
-        25,
-        38
-      ],
-      "label": null,
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3428,
-        2499,
-        26,
-        38
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3479,
-        2639,
-        29,
-        42
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3782,
-        2411,
-        39,
-        28
-      ],
-      "label": null,
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3784,
-        2363,
-        34,
-        25
-      ],
-      "label": null,
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3782,
-        2069,
-        40,
-        30
-      ],
-      "label": null,
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        4088,
-        2145,
-        41,
-        28
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        4145,
-        2145,
-        41,
-        28
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        4581,
-        2067,
-        41,
-        30
-      ],
-      "label": null,
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        4580,
-        2259,
-        41,
-        29
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        5642,
-        2495,
-        41,
-        30
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        4109,
-        2968,
-        48,
-        31
-      ],
-      "label": null,
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        2918,
-        3462,
-        39,
-        29
-      ],
-      "label": null,
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        1153,
-        1043,
-        46,
-        31
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
         2533,
         1043,
         46,
@@ -361,6 +133,30 @@
         1074,
         46,
         31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1153,
+        1365,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2533,
+        1365,
+        46,
+        32
       ],
       "label": null,
       "occluded": false,
@@ -669,12 +465,36 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
+        5956,
+        3185,
+        34,
+        26
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
         3309,
         3243,
         31,
         46
       ],
       "label": "15",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5033,
+        3291,
+        46,
+        32
+      ],
+      "label": null,
       "occluded": false,
       "source": "reviewed"
     },
@@ -718,57 +538,9 @@
       "class_id": "receptacle_duplex",
       "bbox_px": [
         6006,
-        1957,
+        1958,
         46,
-        32
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        1153,
-        1365,
-        46,
-        32
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        2533,
-        1365,
-        46,
-        32
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        5956,
-        3185,
-        34,
-        26
-      ],
-      "label": "72",
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        5033,
-        3291,
-        46,
-        32
+        31
       ],
       "label": null,
       "occluded": false,
@@ -1101,10 +873,10 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        2003,
-        1047,
-        48,
-        31
+        6170,
+        1768,
+        31,
+        46
       ],
       "label": null,
       "occluded": false,
@@ -1116,6 +888,18 @@
         5956,
         2967,
         46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2003,
+        1047,
+        48,
         31
       ],
       "label": null,
@@ -1317,18 +1101,6 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        4507,
-        3287,
-        48,
-        32
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
         5430,
         3287,
         47,
@@ -1353,13 +1125,13 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        6169,
-        1762,
-        34,
-        50
+        4507,
+        3287,
+        48,
+        32
       ],
       "label": null,
-      "occluded": true,
+      "occluded": false,
       "source": "reviewed"
     },
     {
@@ -1401,48 +1173,24 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        3190,
-        3091,
-        46,
-        32
-      ],
-      "label": "FE",
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
         4110,
         3291,
         46,
         31
       ],
       "label": null,
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        2828,
-        2995,
-        47,
-        31
-      ],
-      "label": null,
       "occluded": false,
       "source": "reviewed"
     },
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        4284,
-        2067,
-        41,
-        30
+        3190,
+        3091,
+        46,
+        32
       ],
-      "label": "72",
+      "label": "FE",
       "occluded": false,
       "source": "reviewed"
     },
@@ -1461,46 +1209,10 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        3780,
-        1960,
-        42,
-        30
-      ],
-      "label": "48",
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3802,
-        2224,
-        26,
-        37
-      ],
-      "label": "G",
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        5172,
-        1518,
-        31,
-        46
-      ],
-      "label": "CORRIDOR",
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        5641,
-        1859,
-        42,
-        29
+        4283,
+        2067,
+        46,
+        31
       ],
       "label": "72",
       "occluded": false,
@@ -1509,10 +1221,22 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        1524,
-        2163,
-        40,
-        29
+        5635,
+        1859,
+        46,
+        31
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2828,
+        2995,
+        47,
+        31
       ],
       "label": null,
       "occluded": false,
@@ -1521,13 +1245,37 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        6310,
-        2638,
-        28,
-        40
+        1523,
+        2162,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3782,
+        1960,
+        39,
+        29
+      ],
+      "label": "48",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6309,
+        2623,
+        31,
+        46
       ],
       "label": "72",
-      "occluded": true,
+      "occluded": false,
       "source": "reviewed"
     },
     {
@@ -1535,8 +1283,8 @@
       "bbox_px": [
         3780,
         1901,
-        42,
-        31
+        49,
+        28
       ],
       "label": "60",
       "occluded": true,
@@ -1545,58 +1293,10 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        4043,
-        2633,
-        30,
-        40
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        4237,
-        2632,
-        29,
-        42
-      ],
-      "label": "44",
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3781,
-        2520,
-        39,
+        3786,
+        2361,
+        31,
         26
-      ],
-      "label": "G",
-      "occluded": true,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        6320,
-        2694,
-        29,
-        41
-      ],
-      "label": "72",
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "receptacle_duplex",
-      "bbox_px": [
-        3451,
-        2447,
-        47,
-        31
       ],
       "label": "G/44",
       "occluded": false,
@@ -1605,10 +1305,22 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        2829,
-        3317,
-        44,
-        34
+        5170,
+        1518,
+        31,
+        46
+      ],
+      "label": "CORRIDOR",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4044,
+        2633,
+        31,
+        40
       ],
       "label": null,
       "occluded": true,
@@ -1617,13 +1329,229 @@
     {
       "class_id": "receptacle_duplex",
       "bbox_px": [
-        2903,
-        2937,
+        4237,
+        2632,
+        31,
+        40
+      ],
+      "label": "44",
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3782,
+        2265,
+        37,
+        28
+      ],
+      "label": "G",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6318,
+        2688,
+        31,
+        46
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4580,
+        2257,
+        46,
+        31
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1153,
+        1043,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2827,
+        3317,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3429,
+        2499,
+        25,
+        39
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3439,
+        2442,
+        27,
+        38
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3368,
+        2443,
+        26,
+        37
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3782,
+        2520,
+        39,
+        25
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3782,
+        2447,
+        36,
+        25
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3782,
+        2411,
+        37,
+        29
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3802,
+        2224,
+        26,
+        38
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3782,
+        1814,
+        40,
+        26
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3782,
+        2069,
+        40,
+        28
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4110,
+        2967,
         47,
         31
       ],
       "label": null,
       "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4088,
+        2144,
+        42,
+        29
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4144,
+        2144,
+        42,
+        30
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4581,
+        2067,
+        40,
+        29
+      ],
+      "label": null,
+      "occluded": false,
       "source": "reviewed"
     }
   ]

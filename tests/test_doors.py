@@ -635,3 +635,16 @@ def test_a_registered_symbol_is_recognised_on_a_sheet_it_is_not_anchored_to(t4) 
     symbol, reason = detect.identify(selection, r, found, references=library)
     assert symbol.id == "door_swing", reason
     assert symbol.counted_at == classes.SWING_DOOR.counted_at
+
+
+def test_a_clean_arc_too_small_to_be_evidence_is_still_refused() -> None:
+    """Quality is scale-free, so the inlier floor is what stops a fillet becoming a door.
+
+    A six-pixel curve drawn perfectly scores quality 1.000. That is why `find_arc` ranks its
+    hypotheses by inlier count and not by quality, and why two attempts to re-rank on quality
+    have now been reverted -- see docs/ENGINEERING-LOG.md, "Ranking arcs by quality".
+    MIN_INLIERS is the floor that makes the ranking mean anything, and this pins it.
+    """
+    mask, bbox = _draw(_arc_shape(150, 150, 12, 180, 270, thickness=1), size=340)
+    assert int(mask.sum()) < doors.MIN_INLIERS
+    assert doors.find_arc(mask, bbox, DPI, radius_band_in=(0.02, 0.60)) is None

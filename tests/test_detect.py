@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from takeoff import banding, candidates as cand, classes, detect, scoring, templates
+from takeoff import banding, candidates as cand, classes, detect, doors, scoring, templates
 from takeoff.raster import render
 from takeoff.schema import Raster
 
@@ -856,3 +856,35 @@ def test_the_detail_marker_does_not_take_the_elevation_marker(t5, marker_entry, 
     markers = [d for d in hits
                if d.class_id == "elev_marker" and d.status is banding.Status.COUNTED]
     assert len(markers) == 9
+
+
+# ------------------------------------------------------------- a sheet too coarse to read
+
+
+def test_a_screenshot_of_a_whole_sheet_is_named_as_too_coarse() -> None:
+    """A count of zero on an under-resolved image must say so, not just be zero.
+
+    An uploaded image carries no DPI, so the tool assumes 300 and every size in the project is
+    expressed in inches of paper against that assumption. Screenshot a 36-inch sheet into
+    993 px and the assumption is wrong by 11x: a door arc is 8 px where the detector hunts for
+    72-156, nothing is found, and the count is correctly zero for a reason nobody can see.
+    The silence is the defect, not the zero.
+    """
+    from takeoff.schema import Raster
+
+    shot = Raster(gray=np.full((349, 993), 255, np.uint8), dpi=300,
+                  origin_sheet_pt=(0.0, 0.0), page_index=0)
+    note = detect.too_coarse(shot, doors.RADIUS_BAND_IN)
+    assert note is not None
+    assert "993x349" in note
+    assert "28 DPI" in note, "the resolution it really is, across a sheet-sized page"
+    assert "72-156" in note, "against what this class needs"
+
+
+def test_a_real_sheet_is_never_called_too_coarse() -> None:
+    """36x24 in at 300 DPI. The check keys on physical size, so a sheet cannot trip it."""
+    from takeoff.schema import Raster
+
+    sheet = Raster(gray=np.full((7200, 10800), 255, np.uint8), dpi=300,
+                   origin_sheet_pt=(0.0, 0.0), page_index=0)
+    assert detect.too_coarse(sheet, doors.RADIUS_BAND_IN) is None

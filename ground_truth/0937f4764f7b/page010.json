@@ -1,0 +1,178 @@
+{
+  "document": "0937f4764f7b",
+  "page": 10,
+  "dpi": 300,
+  "reviewed_classes": [
+    "detail_marker"
+  ],
+  "instances": [
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        4682,
+        1494,
+        146,
+        175
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        999,
+        1450,
+        145,
+        178
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        1758,
+        4450,
+        145,
+        178
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        3046,
+        1571,
+        146,
+        176
+      ],
+      "label": "T12",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        3614,
+        1571,
+        146,
+        176
+      ],
+      "label": "T12",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        7675,
+        2492,
+        146,
+        177
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        5825,
+        1571,
+        146,
+        176
+      ],
+      "label": "T12",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        5603,
+        5499,
+        146,
+        173
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        7867,
+        5480,
+        146,
+        177
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        2338,
+        2416,
+        146,
+        174
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        5016,
+        2438,
+        146,
+        174
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        1998,
+        5434,
+        146,
+        174
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        1450,
+        2410,
+        146,
+        174
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        859,
+        2409,
+        144,
+        181
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    }
+  ]
+}

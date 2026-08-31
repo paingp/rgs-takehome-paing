@@ -897,6 +897,48 @@ def detect(
     return out
 
 
+# The smallest sheet anyone drafts on is ARCH A, 9x12 in. A raster that claims to be smaller
+# than this is not a small drawing -- it is a big drawing under-resolved, being read at a DPI
+# it does not have.
+SHEET_FLOOR_IN = 8.0
+
+# What we assume a real sheet is, to turn an implausible size back into an honest resolution.
+# Only used to say a useful number in a message; nothing is detected against it.
+TYPICAL_SHEET_IN = 36.0
+
+
+def too_coarse(raster: Raster, band_in: tuple[float, float]) -> str | None:
+    """A sentence about resolution when the sheet cannot hold the symbol, else None.
+
+    An uploaded image carries no DPI, so `raster.DEFAULT_IMAGE_DPI` assumes 300 and every size
+    in this project is expressed in inches of paper against that assumption. Screenshot a
+    36-inch sheet into 993 px and the assumption is wrong by 11x: the tool then hunts for a
+    72-201 px arc in an image whose doors are 8 px across, finds nothing, and says nothing
+    about why. That silence is the actual defect -- the count is correctly zero.
+
+    Detected on physical size alone, so this needs no notion of where the raster came from and
+    `detect.py` stays raster-only. A real sheet rendered at its own DPI is 36x24 in and never
+    trips it; only an image whose declared DPI is far too high does.
+    """
+    height_px, width_px = raster.gray.shape[:2]
+    long_in = max(width_px, height_px) / raster.dpi
+    if long_in >= SHEET_FLOOR_IN:
+        return None
+
+    # What the resolution would be if this really is a sheet, and what a symbol costs there.
+    real_dpi = width_px / TYPICAL_SHEET_IN
+    radius_px = band_in[0] * real_dpi
+    return (
+        f"This image is {width_px}x{height_px} px, which at {raster.dpi} DPI is only "
+        f"{width_px / raster.dpi:.1f}x{height_px / raster.dpi:.1f} in of paper — smaller than "
+        f"any drawing sheet, so it is a full sheet captured at too low a resolution. Across a "
+        f"{TYPICAL_SHEET_IN:.0f} in sheet it works out at about {real_dpi:.0f} DPI, where this "
+        f"symbol's {band_in[0]:.2f}-{band_in[1]:.2f} in radius is roughly {radius_px:.0f} px "
+        f"and the detector needs {band_in[0] * raster.dpi:.0f}-{band_in[1] * raster.dpi:.0f}. "
+        f"Re-export the sheet at a higher resolution, or open the PDF instead."
+    )
+
+
 def diagnose(
     raster: Raster,
     candidates: Sequence[Candidate],
@@ -916,7 +958,7 @@ def diagnose(
         thin = [c for c in candidates if doors.thin_enough(c)]
         note = None
         if not detections:
-            note = (
+            note = too_coarse(raster, band) or (
                 f"{len(thin)} thin curves were swept for a circle of "
                 f"{band[0]:.2f}-{band[1]:.2f} in radius and none held one."
             )

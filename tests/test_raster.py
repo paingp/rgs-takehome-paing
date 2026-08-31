@@ -23,7 +23,7 @@ E4_PLAN_CLIP = (108.0, 108.0, 1656.0, 1008.0)
 
 
 def test_plan_region_matches_the_recorded_geometry() -> None:
-    """PROGRESS.md records this clip at 300 DPI as 6450 x 3750 px = 24.2 MP."""
+    """The log records this clip at 300 DPI as 6450 x 3750 px = 24.2 MP."""
     r = raster.render(PDF, E4, dpi=300, clip_sheet_pt=E4_PLAN_CLIP)
     assert r.size_px == (6450, 3750)
     assert r.dpi == 300
