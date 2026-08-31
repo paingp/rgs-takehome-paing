@@ -45,14 +45,39 @@ class Band:
         return BAND_COLOURS[self.status]
 
 
-def band(match: float, margin: float | None, symbol: SymbolClass) -> Band:
+def band(
+    match: float,
+    margin: float | None,
+    symbol: SymbolClass,
+    ceiling: Status | None = None,
+) -> Band:
     """Place one score in a band.
 
     `margin` is None when the class has no competitor registered yet. That is not the same as
     a wide margin and must not be scored as one: the gate is recorded as unevaluated and the
     detection still counts, because with a single class there is nothing it could be confused
     with. The moment a second class registers, the gate goes live on its own.
+
+    `ceiling` is the best band a detection is allowed to reach, whatever it scored. It exists
+    for instances found by searching INSIDE a blob too big to be the symbol: the window that
+    scored well was chosen by the search, so its score is the best of many tries rather than
+    one honest reading, and a gate tuned on whole components does not mean the same thing
+    there. Those are worth surfacing and not worth asserting, so they are capped at REVIEW --
+    the count stays as trustworthy as it was and a person confirms the recoveries.
+
+    It can only ever lower a band. A detection that already failed the floor stays rejected.
     """
+    placed = _band(match, margin, symbol)
+    if ceiling is None or _RANK[placed.status] <= _RANK[ceiling]:
+        return placed
+    return Band(ceiling, f"{placed.reason or f'match {match:.3f}'}; held at {ceiling.value}")
+
+
+# Worst to best. Used only to compare a band against a ceiling.
+_RANK = {Status.REJECTED: 0, Status.REVIEW: 1, Status.COUNTED: 2}
+
+
+def _band(match: float, margin: float | None, symbol: SymbolClass) -> Band:
     if match < symbol.review_floor:
         return Band(Status.REJECTED, f"match {match:.3f} below floor {symbol.review_floor:.2f}")
 

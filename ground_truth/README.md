@@ -5,8 +5,8 @@ One JSON per page per document, keyed by the document's content hash -- the same
 colliding, and re-opening a drawing finds the annotations already made against it.
 
 ```
-gt/0937f4764f7b/page005.json     Skanksa.pdf, sheet T5
-gt/e604b67ffc6a/page001.json     an uploaded scan
+ground_truth/0937f4764f7b/page005.json     Skanksa.pdf, sheet T5
+ground_truth/e604b67ffc6a/page001.json     an uploaded scan
 ```
 
 **Made in the viewer, never by typing coordinates.** Count a symbol, review the hits with

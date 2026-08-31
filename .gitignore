@@ -27,3 +27,7 @@ Thumbs.db
 .vscode/
 # Uploaded drawings: content-addressed, rebuildable, never committed.
 documents/
+
+# Classes a person named in the viewer. Their own vocabulary, not the tool's -- the built-in
+# registry lives in takeoff/classes.py and is the thing under version control.
+classes.json

@@ -91,7 +91,9 @@ def test_the_gate_removes_work_and_not_symbols(t5) -> None:
     """The property that matters: counting inside the drawing blocks gives the same answer
     as counting the whole sheet, for both registered classes."""
     r = render(PDF, T5, dpi=DPI)
-    for symbol in classes.all_classes():
+    # Only the classes anchored on this sheet: an entry is built from its anchor, and the
+    # receptacle's lives on E4.
+    for symbol in [c for c in classes.all_classes() if c.anchor.page_index == r.page_index]:
         found = cand.find_candidates(r, cand.ink_layers(r, repair_gap_px=symbol.repair_gap_px))
         found_regions = regions.segment(r, found)
         entry = detect.build_entry(symbol, r, found)

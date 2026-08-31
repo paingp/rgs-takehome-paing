@@ -240,6 +240,75 @@ def test_a_review_band_hit_is_neither_a_claim_nor_invisible() -> None:
     assert score.false_positives == 0
     assert score.precision == 1.0
     assert score.review_volume == 1
+    assert score.recovered == [], "it landed on nothing, so it recovered nothing"
+    assert score.recall_with_review == score.recall
+
+
+def test_a_review_hit_on_a_missed_instance_is_told_from_one_on_nothing() -> None:
+    """The split that makes occlusion work measurable.
+
+    Without it a hard instance deliberately routed to review reads as a false negative AND as
+    more review volume -- every number moves the wrong way and the work looks like a
+    regression. `recall` still counts only what the tool asserted; `recall_with_review` says
+    where it would land if a person confirmed the review hits that found something.
+    """
+    found_it = _detection(box=(500, 500, 40, 40))            # sits on the occluded instance
+    noise = _detection(box=(900, 900, 40, 40))               # sits on nothing
+    for d in (found_it, noise):
+        object.__setattr__(d, "status", banding.Status.REVIEW)
+
+    truth = _truth(_instance(), _instance(box=(500, 500, 40, 40), occluded=True))
+    score = harness.score_class([_detection(), found_it, noise], truth, "m")
+
+    assert score.true_positives == 1 and score.false_negatives == 1
+    assert score.recall == 0.5, "recall is unchanged -- review is not a claim"
+    assert len(score.recovered) == 1 and len(score.review_spurious) == 1
+    assert score.review_volume == 2
+    assert score.recall_with_review == 1.0
+
+    # And the occluded split sees it too, which is the whole point of that split.
+    occluded = score.restricted_to_occluded()
+    assert occluded.recall == 0.0 and occluded.recall_with_review == 1.0
+
+
+def test_an_instance_found_in_review_is_not_also_reported_as_missing() -> None:
+    """The three states a recorded instance can be in must not overlap.
+
+    `missed` is every instance the COUNTED band failed to claim, which is the right
+    denominator for `recall` and the wrong thing to put in front of a person: an instance
+    found and held for confirmation is in there too. Listing it beside `recovered` named the
+    same instance twice, once as lost and once as found, and the list read as a contradiction
+    of itself. `not_found` is the subset with nothing pointing at it; `recall` is untouched.
+    """
+    held = _detection(box=(500, 500, 40, 40))
+    object.__setattr__(held, "status", banding.Status.REVIEW)
+    truth = _truth(_instance(), _instance(box=(500, 500, 40, 40), occluded=True))
+
+    score = harness.score_class([_detection(), held], truth, "m")
+    assert score.false_negatives == 1, "recall still counts it against the counted band"
+    assert score.recall == 0.5
+    assert len(score.recovered) == 1
+    assert score.not_found == [], "but nothing about it is lost"
+
+    # Counted, in review, and not found partition what was recorded.
+    present = score.true_positives + score.false_negatives
+    assert score.true_positives + len(score.recovered) + len(score.not_found) == present
+
+
+def test_the_report_lists_only_instances_nothing_points_at() -> None:
+    """What `missed` means in a written report, and the count that still means the old thing."""
+    from eval import report
+
+    held = _detection(box=(500, 500, 40, 40))
+    object.__setattr__(held, "status", banding.Status.REVIEW)
+    truth = _truth(_instance(), _instance(box=(500, 500, 40, 40), occluded=True))
+
+    scores = {"m": harness.score_class([_detection(), held], truth, "m")}
+    entry = report.payload(scores)["classes"]["m"]
+    assert entry["false_negatives"] == 1, "the metric is unchanged"
+    assert entry["not_found"] == 0
+    assert entry["missed"] == [], "nothing is listed as lost"
+    assert len(entry["recovered"]) == 1
 
 
 def test_an_absent_class_is_gradeable_only_once_someone_has_said_so() -> None:
@@ -282,5 +351,115 @@ def test_the_report_carries_the_boxes_behind_the_numbers() -> None:
     assert row["spurious"][0]["detection_px"] == [300, 300, 40, 40]
     assert row["missed"][0] == {"truth_px": [500, 500, 40, 40], "occluded": True,
                                 "label": None}
-    assert row["in_review"][0]["detection_px"] == [800, 800, 40, 40]
+    assert row["review_spurious"][0]["detection_px"] == [800, 800, 40, 40]
+    assert row["recovered"] == [], "it sits on nothing"
     assert payload["not_graded"] == ["receptacle: not annotated on this page"]
+
+
+# ------------------------------------------------------- scoring a review, not a detector run
+
+
+def test_an_accepted_review_hit_is_a_find_not_a_half_find() -> None:
+    """The whole point of scoring verdicts instead of bands.
+
+    `score_class` refuses to credit a review-band hit, and that is right when nobody has
+    looked: the tool said it did not know, and grading a question as an assertion lets a
+    detector buy precision by sending its hard cases to a person. But once somebody HAS looked
+    and said yes, the band it came from is a detail of how it got there. Calling it a
+    half-find would be reporting the tool's uncertainty rather than the answer.
+    """
+    truth = _truth(_instance(box=(100, 100, 40, 40)), _instance(box=(300, 300, 40, 40)))
+    counted = _detection(box=(100, 100, 40, 40))
+    from_review = _detection(box=(300, 300, 40, 40), match=0.82)
+    object.__setattr__(from_review, "status", banding.Status.REVIEW)
+
+    bands = harness.score_class([counted, from_review], truth, "m")
+    assert bands.true_positives == 1 and bands.recall == 0.5
+
+    review = harness.score_review([counted, from_review], [], truth, "m")
+    assert len(review.detected) == 2
+    assert review.present == 2
+    assert review.recall == 1.0
+    assert review.missed == []
+
+
+def test_a_rejected_match_is_a_false_positive() -> None:
+    """The only definition of one a review can produce: the tool proposed it, a person said no."""
+    truth = _truth(_instance(box=(100, 100, 40, 40)))
+    good = _detection(box=(100, 100, 40, 40))
+    bad = _detection(box=(900, 900, 40, 40), match=0.9)
+
+    score = harness.score_review([good], [bad], truth, "m")
+    assert score.false_positives == 1
+    assert score.recall == 1.0
+    assert score.precision == 0.5
+
+
+def test_an_accepted_match_on_nothing_recorded_is_also_a_false_positive() -> None:
+    """Usually empty, because accepting RECORDS the instance -- but it must not be assumed.
+
+    A page can be evaluated against annotations that predate the review, and an accept that
+    lands nowhere near any of them is a claim about ink with nothing behind it.
+    """
+    truth = _truth(_instance(box=(100, 100, 40, 40)))
+    score = harness.score_review(
+        [_detection(box=(100, 100, 40, 40)), _detection(box=(900, 900, 40, 40))],
+        [], truth, "m",
+    )
+    assert score.false_positives == 1
+    assert len(score.detected) == 1
+
+
+def test_occlusion_is_found_of_recorded_and_carries_no_false_positives() -> None:
+    """A false positive sits on no instance, so no instance can say whether it was occluded."""
+    truth = _truth(
+        _instance(box=(100, 100, 40, 40), occluded=True),
+        _instance(box=(300, 300, 40, 40), occluded=True),
+        _instance(box=(500, 500, 40, 40)),
+    )
+    score = harness.score_review(
+        [_detection(box=(100, 100, 40, 40)), _detection(box=(500, 500, 40, 40))],
+        [_detection(box=(900, 900, 40, 40))],
+        truth, "m",
+    )
+    assert score.occluded_detected == 1
+    assert score.occluded_present == 2
+    assert score.false_positives == 1
+
+
+def test_average_precision_reads_the_order_not_just_the_outcome() -> None:
+    """Why it is worth reporting beside precision rather than instead of it.
+
+    Both runs below catch every recorded instance and get one thing wrong, so precision and
+    recall are identical. They are not equally good: in the second the wrong one outranks the
+    right ones, which is the case a score threshold would get wrong, and AP is the only number
+    here that can see it.
+    """
+    truth = _truth(_instance(box=(100, 100, 40, 40)), _instance(box=(300, 300, 40, 40)))
+    right = [_detection(box=(100, 100, 40, 40), match=0.99),
+             _detection(box=(300, 300, 40, 40), match=0.95)]
+
+    tidy = harness.score_review(right, [_detection(box=(900, 900, 40, 40), match=0.50)],
+                                truth, "m")
+    messy = harness.score_review(right, [_detection(box=(900, 900, 40, 40), match=1.00)],
+                                 truth, "m")
+
+    assert tidy.precision == messy.precision
+    assert tidy.recall == messy.recall == 1.0
+    assert tidy.average_precision == 1.0
+    assert messy.average_precision < 0.85
+    assert round(messy.average_precision, 3) == 0.583
+
+
+def test_average_precision_is_measured_against_the_sheet_not_against_what_was_claimed() -> None:
+    """Finding three of forty and being right about all three is not a perfect run."""
+    truth = _truth(*[_instance(box=(100 * i, 100, 40, 40)) for i in range(1, 5)])
+    score = harness.score_review([_detection(box=(100, 100, 40, 40))], [], truth, "m")
+    assert score.precision == 1.0
+    assert score.average_precision == 0.25
+
+
+def test_nothing_recorded_and_nothing_claimed_is_not_a_failure() -> None:
+    score = harness.score_review([], [], _truth(), "m")
+    assert score.present == 0
+    assert score.recall == 1.0 and score.average_precision == 1.0

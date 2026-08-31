@@ -310,11 +310,23 @@ def test_a_selection_over_a_door_with_a_bubble_on_it_still_reads_as_an_arc(t5) -
 # ------------------------------------------------------------ two classes, side by side
 
 
+def _anchored_here(raster) -> list:
+    """The classes whose reference glyph lives on this sheet.
+
+    An entry is built from its anchor, so a class registered on another sheet cannot be built
+    from this raster at all -- the receptacle is anchored on E4. `eval/suites.py` handles this
+    by building on the anchor page and running against the page under test; these tests are
+    about what happens on ONE sheet, so they take the classes that belong to it.
+    """
+    return [c for c in classes.all_classes()
+            if c.anchor.page_index == raster.page_index]
+
+
 def test_registering_a_second_class_changes_neither_count(t5) -> None:
     """The property the gated build is meant to test: adding a symbol does not move the
     symbol that was already there."""
     r, found = t5
-    entries = [detect.build_entry(c, r, found) for c in classes.all_classes()]
+    entries = [detect.build_entry(c, r, found) for c in _anchored_here(r)]
     assert {e.symbol.id for e in entries} == {"door_swing", "elev_marker"}
 
     together = detect.detect(r, found, entries)
@@ -322,7 +334,7 @@ def test_registering_a_second_class_changes_neither_count(t5) -> None:
         cid: sum(1 for d in together if d.class_id == cid and d.status is banding.Status.COUNTED)
         for cid in ("door_swing", "elev_marker")
     }
-    assert counts == {"door_swing": 31, "elev_marker": 9}
+    assert counts == {"door_swing": 31, "elev_marker": 8}
 
 
 def test_the_margin_gate_finally_fires_where_two_classes_claim_one_blob(t5) -> None:
@@ -334,12 +346,16 @@ def test_the_margin_gate_finally_fires_where_two_classes_claim_one_blob(t5) -> N
     blob might be, so the two classes now compete for one piece of ink and the margin is
     real. This is the first time the second gate has been exercised by anything.
 
+    It depends on a blob reporting its best window even when that window scores below the
+    class floor -- see `fused_windows`. Returning only windows worth counting took this back
+    to zero rivals, silently, while every other number on the sheet held.
+
     What it is not yet is the nested-symbol case it was built for -- duplex inside quad,
     0.816 against 0.681. These margins are wide, because a triangle and an arc are not
     confusable; the thin ones are all low-scoring doors that no gate would have counted.
     """
     r, found = t5
-    entries = [detect.build_entry(c, r, found) for c in classes.all_classes()]
+    entries = [detect.build_entry(c, r, found) for c in _anchored_here(r)]
     dets = detect.detect(r, found, entries)
 
     rivals = [d for d in dets if d.margin is not None]
@@ -423,7 +439,7 @@ def test_a_shape_never_profiles_as_a_curve(t5) -> None:
     entry = detect.build_entry(classes.ELEVATION_MARKER, r, found)
     counted = [d for d in detect.detect(r, found, [entry])
                if d.status is banding.Status.COUNTED]
-    assert len(counted) == 9
+    assert len(counted) == 8
 
     rng = np.random.default_rng(1)
     for d in counted:

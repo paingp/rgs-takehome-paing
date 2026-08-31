@@ -207,6 +207,239 @@ def test_counting_from_the_anchor_uses_the_classs_own_segmentation(client: TestC
     assert body["counts"]["by_band"]["counted"] == 31
 
 
+def _counted(client: TestClient, drag) -> dict:
+    return client.post(f"/api/pages/{PAGE}/count", json={"bbox_image_px": list(drag)}).json()
+
+
+def test_naming_a_selection_registers_a_countable_class(tmp_path, monkeypatch) -> None:
+    """A new class is a name for a SELECTION, and that is what makes it work everywhere.
+
+    The built-in vocabulary is three symbols, which is a fair bet against no real drawing set.
+    An unknown symbol was already countable -- it came back "unnamed" -- but ground truth and
+    grading both key on a class id, so there was no way to record what a count found or to
+    measure it. Storing the drag as the class's anchor is what lets the new class behave like
+    a built-in: recognised on a DIFFERENT instance, not just the one it was cut from.
+    """
+    from takeoff import classes
+
+    monkeypatch.setattr(classes, "USER_CLASSES_PATH", tmp_path / "classes.json")
+    from server.app import _candidates_for, _to_image_px, _library, _library_lock
+
+    page = 14                                        # M2, the mechanical plan
+    raster.build_dzi(BUNDLED_SOURCE, page - 1)
+    client = TestClient(app)
+    r, _ = _candidates_for(page)
+    made = client.post("/api/classes", json={
+        "name": "Supply diffuser",
+        "page": page,
+        "bbox_image_px": list(_to_image_px((1650, 2232, 105, 125), r)),
+    })
+    try:
+        assert made.status_code == 200, made.text
+        assert made.json()["id"] == "supply_diffuser"
+        assert made.json()["user_defined"] is True
+
+        # A name is unique, and an empty one is not a name.
+        again = client.post("/api/classes", json={
+            "name": "supply  DIFFUSER", "page": page,
+            "bbox_image_px": list(_to_image_px((1650, 2232, 105, 125), r))})
+        assert again.status_code == 409
+        blank = client.post("/api/classes", json={
+            "name": "  ", "page": page,
+            "bbox_image_px": list(_to_image_px((1650, 2232, 105, 125), r))})
+        assert blank.status_code == 400
+
+        listed = {c["id"]: c for c in client.get("/api/classes").json()["classes"]}
+        assert listed["supply_diffuser"]["user_defined"] is True
+        assert listed["door_swing"]["user_defined"] is False
+
+        # The point of the anchor: a DIFFERENT instance is recognised as this class.
+        other = client.post(f"/api/pages/{page}/count", json={
+            "bbox_image_px": list(_to_image_px((5710, 2240, 85, 112), r))}).json()
+        assert other["class_id"] == "supply_diffuser"
+        assert other["registered"] is True
+
+        # And it survives a restart, because it was written down.
+        assert (tmp_path / "classes.json").exists()
+        classes.REGISTRY.pop("supply_diffuser")
+        assert classes.load_user_classes(tmp_path / "classes.json")
+        assert classes.get("supply_diffuser").name == "Supply diffuser"
+
+        # Removable, and only this kind is. A built-in ships with the tool and its anchor is
+        # in classes.py rather than in data, so a button offering to delete one would lie.
+        assert client.delete("/api/classes/door_swing").status_code == 403
+        assert client.delete("/api/classes/nothing_like_this").status_code == 404
+
+        gone = client.delete("/api/classes/supply_diffuser")
+        assert gone.status_code == 200 and gone.json()["removed"] is True
+        assert "supply_diffuser" not in classes.REGISTRY
+        assert not any(c["id"] == "supply_diffuser"
+                       for c in client.get("/api/classes").json()["classes"])
+        # Taken out of the file too, so it does not come back on restart.
+        assert classes.load_user_classes(tmp_path / "classes.json") == []
+    finally:
+        classes.REGISTRY.pop("supply_diffuser", None)
+        with _library_lock:
+            _library.clear()
+
+
+def test_select_resolves_a_drag_on_the_segmentation_that_reads_it() -> None:
+    """What you see selected has to be what gets counted.
+
+    What a symbol is MADE OF depends on the ink threshold. E4's duplex receptacle is drawn on
+    a thin CAD layer: at the default cut its two bars produce no ink at all, so a drag around
+    the whole glyph came back as a 31x31 circle where the symbol is 47x31. The count was right
+    -- identification re-snaps on the class's own ink -- so the preview was disagreeing with
+    the answer, and a person who had carefully boxed the whole thing was shown half of it.
+    """
+    from server.app import _candidates_for, _to_image_px
+
+    page = 26
+    raster.build_dzi(BUNDLED_SOURCE, page - 1)
+    client = TestClient(app)
+    r, _ = _candidates_for(page)
+    x, y, w, h = 2469, 1069, 47, 31                  # one duplex receptacle
+    drag = _to_image_px((x - 8, y - 8, w + 16, h + 16), r)
+
+    body = client.post(f"/api/pages/{page}/select", json={"bbox_image_px": list(drag)}).json()
+    assert body["found"]
+    assert body["read_as"] == "receptacle_duplex"
+    assert body["size_px"] == [w, h], "the whole glyph, not the circle it starts as"
+    assert body["ink_px"] == 181
+
+
+def _verdicts(detections, keep):
+    """The detections as the viewer sends them, with a verdict on every one.
+
+    `keep` decides each match. Evaluate scores a REVIEW, so every match must carry one --
+    which band it came from stops mattering the moment somebody has looked at it.
+    """
+    return [
+        {"class_id": d["class_id"], "bbox_px": d["bbox_px"], "status": d["status"],
+         "match": d["match"], "reason": d.get("reason"), "variant": d.get("variant", ""),
+         "verdict": "kept" if keep(d) else "dropped"}
+        for d in detections
+    ]
+
+
+def test_evaluate_scores_the_verdicts_rather_than_the_bands(client: TestClient) -> None:
+    """The button a person presses after reviewing, and it grades what they decided.
+
+    `-m eval.suites --page 5` scores this class 9 TP / 3 FN with the other three found and
+    held for review, because no human is present and a review-band hit is a question rather
+    than a claim. This is the other side of that: somebody HAS been through all twelve, and
+    once they have confirmed the three held back there is nothing left to hold back. Accepting
+    every match therefore reads 12 of 12, not 9 of 12 with a footnote.
+    """
+    from takeoff import classes
+
+    count = _counted(client, classes.ELEVATION_MARKER.anchor.drag_bbox_px)
+    assert count["class_id"] == "elev_marker"
+
+    run = client.post(f"/api/pages/{PAGE}/evaluate", json={
+        "detections": _verdicts(count["detections"], lambda d: d["match"] >= 0.90),
+    }).json()
+
+    assert run["graded"] and run["live"]
+    row = run["classes"]["elev_marker"]
+    assert row["present"] == 12, "twelve markers are recorded on T5"
+    assert row["detected"] + row["missed"] == row["present"], "every instance in one state"
+    assert row["detected"] >= 9, "at least what the counted band claims"
+    assert row["occluded_present"] == 2
+    assert 0.0 <= row["average_precision"] <= 1.0
+    assert row["recall"] == row["detected"] / row["present"]
+
+
+def test_a_rejected_match_is_the_false_positive_count(client: TestClient) -> None:
+    """The only definition a review can produce: the tool proposed it, a person said no.
+
+    Rejecting every match is the extreme case and pins the arithmetic: nothing is detected,
+    everything recorded is missed, and every proposal is wrong.
+    """
+    from takeoff import classes
+
+    count = _counted(client, classes.ELEVATION_MARKER.anchor.drag_bbox_px)
+    run = client.post(f"/api/pages/{PAGE}/evaluate", json={
+        "detections": _verdicts(count["detections"], lambda d: False),
+    }).json()
+
+    row = run["classes"]["elev_marker"]
+    assert row["detected"] == 0
+    assert row["missed"] == row["present"] == 12
+    assert row["false_positives"] == len(count["detections"])
+    assert row["recall"] == 0.0
+    assert row["average_precision"] == 0.0
+    assert row["occluded_detected"] == 0 and row["occluded_present"] == 2
+
+
+def test_evaluate_scores_against_the_annotations_the_viewer_is_holding(
+    client: TestClient
+) -> None:
+    """Accepting records the instance, and saving is a separate gesture.
+
+    Scored against the file on disk, a review would count every instance the person had just
+    confirmed as one the tool missed -- the button would punish somebody for using it and then
+    not pressing Save. So the viewer sends its own annotations, and they are what count.
+    """
+    from takeoff import classes
+    from server.app import _to_image_px, _candidates_for
+
+    count = _counted(client, classes.ELEVATION_MARKER.anchor.drag_bbox_px)
+    r, _ = _candidates_for(PAGE)
+    # One recorded instance, nowhere near anything: it must show up as a miss even though
+    # nothing on disk says it is there.
+    invented = {"class_id": "elev_marker",
+                "bbox_image_px": _to_image_px((500, 500, 44, 129), r),
+                "label": None, "occluded": False}
+
+    run = client.post(f"/api/pages/{PAGE}/evaluate", json={
+        "detections": _verdicts(count["detections"], lambda d: True),
+        "truth": [invented],
+    }).json()
+
+    row = run["classes"]["elev_marker"]
+    assert row["present"] == 1, "only what the viewer sent is ground truth here"
+    assert row["missed"] == 1
+    assert row["false_positives"] == len(count["detections"]), "accepted, but on nothing"
+
+
+def test_evaluate_scores_only_the_classes_that_were_counted(client: TestClient) -> None:
+    """Grading a class the detector was never run for reports every one of its annotations as
+    a miss, against nothing. T5 has doors recorded as well as markers, so counting markers
+    must name doors as not evaluated rather than scoring them 0."""
+    from takeoff import classes
+
+    count = _counted(client, classes.ELEVATION_MARKER.anchor.drag_bbox_px)
+    run = client.post(f"/api/pages/{PAGE}/evaluate", json={
+        "detections": _verdicts(count["detections"], lambda d: True),
+    }).json()
+
+    assert set(run["classes"]) == {"elev_marker"}
+    assert any("door_swing" in line for line in run["not_graded"])
+
+
+def test_evaluate_says_what_is_missing_rather_than_failing(client: TestClient) -> None:
+    """With nothing counted there is nothing to score, and that is a sentence to read, not an
+    error to debug. Same for a count nobody has reviewed: scoring it would report every
+    recorded instance as missed against a person who has not answered yet."""
+    from takeoff import classes
+
+    run = client.post(f"/api/pages/{PAGE}/evaluate", json={"detections": []}).json()
+    assert run["graded"] is False
+    assert "count" in run["how"].lower()
+
+    count = _counted(client, classes.ELEVATION_MARKER.anchor.drag_bbox_px)
+    unreviewed = client.post(f"/api/pages/{PAGE}/evaluate", json={
+        "detections": [
+            {"class_id": d["class_id"], "bbox_px": d["bbox_px"], "status": d["status"],
+             "match": d["match"]}
+            for d in count["detections"]
+        ],
+    }).json()
+    assert unreviewed["graded"] is False
+    assert "reject" in unreviewed["how"].lower()
+
+
 def test_the_marker_is_still_identified_on_the_default_segmentation(client: TestClient) -> None:
     """The other half: trying more segmentations must not move a class that was already
     recognised on the first one."""
@@ -219,7 +452,7 @@ def test_the_marker_is_still_identified_on_the_default_segmentation(client: Test
     body = client.post(f"/api/pages/{PAGE}/count", json={"bbox_image_px": drag}).json()
     assert body["class_id"] == "elev_marker", body["identified_as"]
     assert body["template"]["detector"] == "template"
-    assert body["counts"]["by_band"]["counted"] == 10
+    assert body["counts"]["by_band"]["counted"] == 9
 
 
 def test_candidates_report_the_sheets_regions(client: TestClient) -> None:
@@ -337,3 +570,83 @@ def test_grading_hands_the_viewer_boxes_in_its_own_pixels(client: TestClient, mo
     # Image pixels, not detection pixels: the DZI is rendered at the viewer's own DPI.
     scale = raster.VIEWER_DPI / raster.DETECTION_DPI
     assert missed["bbox_image_px"][0] == pytest.approx(9185 * scale, abs=1.0)
+
+
+def test_warming_a_sheet_takes_the_wait_off_the_first_drag(client: TestClient) -> None:
+    """Reading a sheet is ~20 s and has nothing to do with where the box was drawn.
+
+    Three candidate passes over a 7200x10800 raster plus a reference template per registered
+    class. None of it depends on the drag, and every drag after the first costs ~0.3 s because
+    it is all cached -- so the whole cost landed on whoever dragged first, after they had
+    finished the gesture and had nothing to look at. It now starts when the sheet opens.
+
+    Two things are being asserted, and the second is the one that bites. The endpoint must not
+    block -- it is called from the viewer's `open` handler, where a 20 s await would freeze the
+    sheet. And a second caller must JOIN the pass in flight rather than start its own: a person
+    dragging a box while the sheet is still being read is the normal case on a fresh page, and
+    without the per-key build locks that means two threads doing the same work at once on a
+    machine that has just been asked to be quick.
+    """
+    import time
+
+    from server.app import _candidates, _candidates_lock, _warm_state
+
+    started = time.perf_counter()
+    first = client.post(f"/api/pages/{PAGE}/warm").json()
+    assert time.perf_counter() - started < 2.0, "warm must not block the request thread"
+    assert first["state"] in {"reading", "ready"}
+
+    # Idempotent: asking again while it runs joins the pass rather than starting another.
+    again = client.post(f"/api/pages/{PAGE}/warm").json()
+    assert again["state"] in {"reading", "ready"}
+
+    deadline = time.monotonic() + 180
+    while _warm_state(PAGE)["state"] == "reading" and time.monotonic() < deadline:
+        time.sleep(0.2)
+    state = client.get(f"/api/pages/{PAGE}/warm").json()
+    assert state["state"] == "ready", state
+    assert state["progress"] == 1.0
+
+    # Every segmentation a registered class asks for is now in hand, which is what makes the
+    # drag fast rather than merely warm-ish: identification tries them in turn.
+    from server.app import _segmentations, _source
+
+    with _candidates_lock:
+        keys = set(_candidates)
+    for gap, cut in _segmentations():
+        assert (str(_source(None)), PAGE, gap, cut) in keys
+
+    # And the drag it was warmed for is now quick.
+    drag = client.post(f"/api/pages/{PAGE}/select",
+                       json={"bbox_image_px": [6470, 2870, 62, 148]})
+    t0 = time.perf_counter()
+    drag = client.post(f"/api/pages/{PAGE}/select",
+                       json={"bbox_image_px": [6470, 2870, 62, 148]})
+    assert drag.status_code == 200
+    assert drag.json()["read_as"] == "elev_marker"
+    assert time.perf_counter() - t0 < 5.0, "a warm sheet should answer a drag in well under 1 s"
+
+
+def test_the_detail_marker_ships_with_the_tool(client: TestClient) -> None:
+    """It was added from the viewer, then promoted: it is vocabulary, not somebody's note.
+
+    A class in `classes.json` is one person's, on one machine, and is not committed. The
+    detail marker is on T11 and T12 of the bundled drawing and separates from everything else
+    on the sheet by 0.34 of score, so it belongs in the registry where every user gets it and
+    where the harness can grade it.
+    """
+    from takeoff import classes
+
+    listed = {c["id"]: c for c in client.get("/api/classes").json()["classes"]}
+    assert listed["detail_marker"]["user_defined"] is False
+    assert "detail_marker" in classes.BUILT_IN
+    assert not classes.is_user_class("detail_marker")
+
+    # Built in means not removable: the anchor lives in classes.py, not in data, so a button
+    # offering to delete it would be a code change pretending to be a button.
+    assert client.delete("/api/classes/detail_marker").status_code == 403
+
+    # And a stale row for it in somebody's classes.json must not shadow the real one.
+    symbol = classes.get("detail_marker")
+    assert symbol.anchor.page_index == 8
+    assert symbol.counted_at == 0.85 and symbol.review_floor == 0.70

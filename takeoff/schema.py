@@ -66,7 +66,7 @@ class InkLayers:
 # Where reviewed annotations live. Keyed by document hash, the same way `cache/` is, so the
 # bundled PDF and an uploaded scan can both have a page 5 without colliding, and re-opening a
 # drawing finds the annotations already made against it.
-GT_ROOT = Path("gt")
+GT_ROOT = Path("ground_truth")
 
 # What produced an instance. Only `reviewed` is graded against -- decision 6: proposals are
 # never trusted until a human has looked at them.

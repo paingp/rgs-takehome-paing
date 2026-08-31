@@ -188,6 +188,13 @@ def kind_at(regions: list[Region], x: float, y: float) -> str:
     return min(hits, key=lambda r: r.area_px).kind
 
 
+# How much of a sheet this filter may remove before it is disbelieved. Measured: it removes
+# 47% of T4 and 14% of T5, and on both the counts are identical with it and without -- it
+# takes work away, not symbols. On E4 it removes 91%, because the classifier reads the entire
+# electrical plan as a notes column and deletes every receptacle on the sheet.
+MAX_REMOVED = 0.75
+
+
 def countable(regions: list[Region], candidates) -> list:
     """The candidates a count should consider: everything not sitting in set type.
 
@@ -195,14 +202,28 @@ def countable(regions: list[Region], candidates) -> list:
     Selection still sees the whole sheet, so a legend entry can still be dragged and a
     template built from it -- what this removes is the general notes from the pool that
     gets grouped, size-gated and swept.
+
+    AND IT REFUSES TO DELETE THE SHEET. This is an optimisation: on the sheets it was
+    measured against it removes half the work and changes no count. That makes it exactly the
+    kind of thing that must fail safe, because a segmentation that has misread a drawing does
+    not announce itself -- it silently returns fewer candidates, and a class whose instances
+    all lived in the deleted part comes back as an honest-looking zero.
+
+    E4 is that case. Its plan is drawn in a screened lineweight with device glyphs and text at
+    similar heights, so the height-uniformity classifier reads all 50 MP of it as set type and
+    leaves 593 of 6,565 candidates -- none of them receptacles. Past `MAX_REMOVED` the answer
+    is not to trust the classifier harder; it is to count the whole sheet and pay the time.
     """
     text = [r for r in regions if r.kind == TEXT]
     if not text:
         return list(candidates)
-    return [
+    kept = [
         c for c in candidates
         if not any(r.contains(*c.centroid_px) for r in text)
     ]
+    if candidates and len(kept) < (1 - MAX_REMOVED) * len(candidates):
+        return list(candidates)
+    return kept
 
 
 def drawing_regions(found: list[Region]) -> list[Region]:

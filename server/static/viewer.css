@@ -114,6 +114,11 @@ main { flex: 1 1 auto; min-height: 0; display: flex; }
 
 #preview-wrap {
   min-height: 150px;
+  /* A ceiling as well as a floor. The preview is a magnified crop, so a tall symbol -- a
+     door swing, an elevation marker on its side -- rendered taller than the panel and spilled
+     over the stats below it. */
+  max-height: 260px;
+  overflow: hidden;
   display: grid;
   place-items: center;
   padding: 10px;
@@ -124,7 +129,12 @@ main { flex: 1 1 auto; min-height: 0; display: flex; }
 
 #preview-wrap:has(#preview[hidden]) { background: #1f2225; }
 
-#preview { max-width: 100%; image-rendering: pixelated; }
+#preview {
+  max-width: 100%;
+  max-height: 240px;      /* the wrap's height less its padding */
+  object-fit: contain;    /* shrink to fit rather than crop */
+  image-rendering: pixelated;
+}
 
 #stats { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
 #stats dt { color: var(--muted); }
@@ -183,16 +193,51 @@ main { flex: 1 1 auto; min-height: 0; display: flex; }
 #results { border-top: 1px solid #2a2f36; margin-top: 12px; padding-top: 10px; }
 #result-class { margin: 0 0 8px; }
 
-#bands { list-style: none; margin: 0 0 8px; padding: 0; }
-#bands li {
+#bands, #verdict-tally { list-style: none; margin: 0 0 8px; padding: 0; }
+#bands li, #verdict-tally li {
   display: flex;
   align-items: baseline;
   gap: 8px;
   padding: 3px 0;
   font-size: 13px;
 }
-#bands .swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
-#bands .n { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; }
+#bands .swatch, #verdict-tally .swatch {
+  width: 10px; height: 10px; border-radius: 2px; flex: none;
+}
+#bands .n, #verdict-tally .n {
+  margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600;
+}
+#verdict-tally:empty { display: none; }
+
+/* The question mark beside a heading. Small and quiet: it is a way back to the instructions,
+   not a control anybody needs to find. */
+button.help {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-left: 6px;
+  border-radius: 50%;
+  font-size: 11px;
+  line-height: 1;
+  vertical-align: middle;
+}
+button.help[aria-pressed="true"] { background: var(--accent, #0072B2); color: #fff; }
+#truth-help-text[hidden] { display: none; }
+
+/* Naming a selection. Laid out like the missed-instance step, because it is the same kind of
+   thing: a short form that appears where the work is and goes away when it is done. */
+#class-new input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  font: inherit;
+  color: inherit;
+  background: #1f2225;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+#class-new-note { margin: 4px 0 2px; }
+#truth-help-text p { margin: 6px 0; }
 
 #hits { list-style: none; margin: 8px 0 0; padding: 0; max-height: 210px; overflow-y: auto; }
 #hits li {
@@ -394,6 +439,98 @@ main { flex: 1 1 auto; min-height: 0; display: flex; }
   cursor: pointer;
 }
 #truth-legend .none-here input { margin: 0; }
+/* The line that says the overlay is filtered to one class. Muted: it is a statement about
+   what is on screen, not another class row. */
+#grade-list .metrics {
+  color: #b0b0b0;
+  font-size: 11px;
+  line-height: 1.5;
+  padding-left: 2px;
+  margin-bottom: 4px;
+}
+
+/* The reminder that a review is unfinished. Vermillion, because it is the reason a button
+   did not do what was asked -- not a note in passing. */
+.warn {
+  color: #D55E00;
+  margin: 6px 0;
+  line-height: 1.45;
+}
+.warn[hidden] { display: none; }
+
+/* One metric per row, label left and number right, so a column of them can be read down
+   rather than parsed sentence by sentence. */
+#grade-list li.metric {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 1px 0 1px 10px;
+  color: #c8c8c8;
+}
+#grade-list li.metric .label { flex: 1 1 auto; }
+#grade-list li.metric .value {
+  font-variant-numeric: tabular-nums;
+  color: #e6e6e6;
+}
+
+/* The one busy line in the panel. A spinner rather than a bar: none of the three waits it
+   covers reports a fraction that means anything to a person. */
+#panel-busy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #b0b0b0;
+}
+#panel-busy[hidden] { display: none; }
+#panel-busy .spinner {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #3a3a3a;
+  border-top-color: #0072B2;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+/* Honour a person who has asked the machine to stop moving: the line still says what is
+   happening, it just stops spinning. */
+@media (prefers-reduced-motion: reduce) {
+  #panel-busy .spinner { animation: none; border-top-color: #0072B2; }
+}
+
+#class-roster {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+#class-roster[hidden] { display: none; }
+#class-roster li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid #2a2a2a;
+}
+#class-roster li:last-child { border-bottom: none; }
+#class-roster .class-name { flex: 1 1 auto; min-width: 0; color: #e6e6e6; }
+#class-roster .built-in { color: #7a7a7a; font-size: 11px; flex: none; }
+#class-roster .drop-class {
+  flex: none;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: none;
+  border: 1px solid #4a4a4a;
+  border-radius: 3px;
+  color: #b8b8b8;
+  cursor: pointer;
+}
+#class-roster .drop-class:hover { border-color: #D55E00; color: #D55E00; }
 /* The graded run. Green for what the tool got right, vermillion for both ways of being
    wrong, amber for what it sent to a person -- the same amber the review band already uses,
    because it is the same claim. */

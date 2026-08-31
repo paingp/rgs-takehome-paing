@@ -120,8 +120,10 @@ def scene() -> tuple[Raster, list[cand.Candidate], cand.BBox]:
                                                right; the drag box cuts it at col 230
         drag    cols  40..230, rows  70..210
 
-    The label run finishes inside the box, so it is the symbol's. The note run does not, so
-    the three of its letters that fall inside are fragments of something else.
+    Neither run is the symbol. The note is obviously not -- it is clipped by the box edge --
+    and neither is the label, which finishes inside: a caption is different on every instance,
+    so a template holding one matches only the instance it was cut from. What identifies an
+    instance is read separately, from the text layer, per detection.
     """
     gray = np.full((300, 400), 255, np.uint8)
     gray[110:113, 60:141] = 0      # ring, top edge
@@ -163,13 +165,66 @@ def test_the_box_is_the_boundary(scene) -> None:
     assert sum(_is_note(c) for c in members) == 3
 
 
-def test_foreign_text_is_removed_but_the_label_survives(scene) -> None:
-    """The default rule: the note fragments go, the complete label stays."""
+def test_the_selection_never_grows_past_the_drag(scene) -> None:
+    """The box is a ceiling on the symbol's size.
+
+    A component is kept when most of its ink is inside, and it used to be kept WHOLE -- so a
+    supply diffuser with a duct line curling off one corner came back bigger than the box
+    drawn round it, and no amount of care with the mouse could exclude the curl. Measured on
+    M2: a tight 82x106 drag returned a 120x123 selection.
+
+    Refusing components that stick out was the alternative, and it loses the symbol instead of
+    the curl. Cutting at the boundary keeps what was asked for and nothing else.
+    """
+    r, found, _ = scene
+    # A box that cuts the ring in half: the half inside is the symbol, the half outside is not.
+    drag = (60, 110, 40, 81)
+    selection = cand.snap(found, drag, dpi=r.dpi)
+
+    x, y, w, h = selection.bbox_px
+    assert x >= drag[0] and y >= drag[1]
+    assert x + w <= drag[0] + drag[2] and y + h <= drag[1] + drag[3]
+    assert w < 81, "the ring really was wider than the box"
+
+
+def test_a_piece_the_rule_dropped_is_still_offered(scene) -> None:
+    """A caption is removed from the count, not from the screen.
+
+    The rule reads a line of characters that does not include the symbol as a label and drops
+    it, which is right for counting and wrong as a final answer: a person who meant to include
+    it needs to see it and say so. Deleting ink the box enclosed leaves nothing to click and
+    makes the default the only reachable outcome.
+    """
     r, found, drag = scene
     selection = cand.snap(found, drag, dpi=r.dpi)
-    assert len(selection.members) == 5            # ring + 4 label
+    assert len(selection.members) == 1, "the ring alone is the symbol"
+    assert selection.set_aside, "and the label is kept to be shown"
+
+    restored = selection.plus(range(len(selection.set_aside)))
+    assert len(restored.members) > len(selection.members)
+    assert not restored.set_aside, "nothing is offered twice"
+    assert restored.area_px > selection.area_px, "the label's ink joined the symbol"
+
+    # And a piece dropped by hand joins the same pile, so the click can be taken back.
+    reduced = restored.without([1])
+    assert len(reduced.members) == len(restored.members) - 1
+    assert len(reduced.set_aside) == 1
+
+
+def test_text_that_is_not_the_symbol_is_removed(scene) -> None:
+    """The default rule: a line of characters that does not include the symbol is not it.
+
+    Both runs go -- the clipped note and the complete label. It used to keep a label that
+    finished inside the box, and that is what made a generous drag around the T5 marker build
+    a glyph-plus-label template: 10 instances counted became 1, and the class lost its name
+    because nothing in the registry matched. Whether a run finishes inside the box turns out
+    to say nothing about whether it is the symbol.
+    """
+    r, found, drag = scene
+    selection = cand.snap(found, drag, dpi=r.dpi)
+    assert len(selection.members) == 1            # the ring, and only the ring
     assert sum(_is_note(c) for c in selection.members) == 0
-    assert sum(_is_label(c) for c in selection.members) == 4
+    assert sum(_is_label(c) for c in selection.members) == 0
 
 
 def test_the_symbol_itself_is_never_removed(scene) -> None:
@@ -193,7 +248,7 @@ def test_bbox_is_trimmed_to_the_kept_ink_not_the_drag(scene) -> None:
     r, found, drag = scene
     selection = cand.snap(found, drag, dpi=r.dpi)
     x, y, w, h = selection.bbox_px
-    assert (x, y) == (60, 85)                     # label top-left, ring left edge
+    assert (x, y) == (60, 110)                    # the ring's own top-left
     assert x + w == 141 and y + h == 191
     assert w < drag[2] and h < drag[3]
 

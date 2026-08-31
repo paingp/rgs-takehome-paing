@@ -42,18 +42,33 @@ GROUP_GAP_FACTOR = 0.08
 # the sheet actually needs and still refuses a chain of characters.
 MAX_GROUP_PARTS = 4
 
+# Slack on the template's own part spacing, so an instance whose pieces sit a pixel further
+# apart than the reference's still assembles. A stroke's width, no more.
+PART_GAP_MARGIN_PX = 3.0
+
+# How many more pieces an instance may arrive in than the reference had. Suppression, a
+# threshold or a line drawn across the symbol all split a piece in two; none of them doubles
+# the count of a nine-dash arc.
+PART_COUNT_HEADROOM = 2.0
+
 # A blob may be bigger than the symbol without being something else: a line drawn across a
 # marker is one component with it, so the symbol arrives fused to its occluder. Both occluded
 # markers on T5 are like this -- 77x153 and 116x146 px against a 44x129 marker -- and both
 # were invisible to every threshold because an oversized blob never reaches scoring at all.
 #
 # So an oversized blob gets the symbol looked for INSIDE it. The bound is on how much foreign
-# ink is worth searching through: past a few times the symbol's own footprint this stops being
-# an occluded instance and starts being a search for an accident in a wall.
-MAX_FUSED_FOOTPRINTS = 4.0
+# ink is worth searching through: past some multiple of the symbol's own ink this stops being
+# an occluded instance and starts being a search for an accident in a wall. In MULTIPLES OF
+# THE TEMPLATE'S INK, not of its bounding box -- a 200x200 patch of wall is mostly white and
+# cheap to search, a 200x200 hatch fill is neither, and box area cannot tell them apart.
+#
+# It was 4.0 and read box area, which excluded every real case: see `fused_blobs`.
+MAX_FUSED_INK = 48.0
 
-# How much of the template's ink a blob must hold before the search is worth running. A symbol
-# fused with a line still carries all of its own ink; this only excludes specks.
+# How much of the template's ink a blob must hold before the search is worth running, and how
+# much it may hold before it is too solid to be hiding anything. A symbol fused with a line
+# still carries all of its own ink, so the floor only excludes specks; the ceiling is measured
+# in ink rather than box area for the reason given on `fused_blobs`.
 FUSED_INK_SHARE = 0.5
 
 # Coarse pass, then +/- one stride at single-pixel steps around the best window. Line work is
@@ -128,6 +143,12 @@ class Detection:
     ink_px: int = 0
     parts: int = 1            # components merged to make this instance
 
+    # Found by searching inside a blob too big to be the symbol, rather than by scoring a
+    # component whole. Worth saying out loud: it changes what the score means (the best of
+    # many windows, not one reading) and it changes what a reviewer should check -- "is there
+    # really a symbol in here" rather than "is this 0.93 good enough".
+    fused: bool = False
+
     @property
     def colour(self) -> str:
         return banding.BAND_COLOURS[self.status]
@@ -186,6 +207,22 @@ PROFILE_BAND_IN = (0.15, 0.80)
 # catch the neighbouring sizes without reaching the next symbol entirely.
 RADIUS_TOLERANCE = 0.35
 
+# An arc that SPANS what was selected is the symbol; an arc that spans half of it is a detail
+# inside a bigger shape, and reading the whole selection as a curve because of it is how a
+# square air device gets counted as door swings.
+#
+# Measured over 28 annotated doors on T4 and T5, each dragged generously the way a person
+# does: radius / selection span runs 0.71 to 1.09, median ~1.0 -- a swing's arc is as big as
+# the thing you drew a box around, which is what makes it the thing you were pointing at. The
+# four-quadrant supply diffuser on M2 fits a clean 75-degree arc inside one of its corner
+# brackets and scores 0.45. The gate sits in that gap, nearer the diffuser than the worst
+# door, because losing a door is worse than misreading an air device.
+#
+# Ink share does NOT separate them and was tried first: the door's arc is 0.21 of its
+# selection's ink and the diffuser's is 0.36, the wrong way round, because a swing is a thin
+# curve beside a solid keynote bubble.
+ARC_SPANS_SELECTION = 0.60
+
 # How good an arc has to be before a selection is read as a curve rather than a shape. This
 # is `Arc.quality`, which judges the arc alone -- deliberately NOT the arc's share of the
 # blob it sits in. Gating on share meant the door to room 217 could not be selected as a
@@ -219,6 +256,12 @@ def profile_selection(
     A symbol whose ink is dense is never read as an arc, whatever curve can be fitted through
     it: the hatched elevation marker fills 24% of its box and a circle can be run through its
     diagonals, but it is a shape, and shapes are matched as shapes.
+
+    Nor is a symbol whose ink is spread over several pieces, when the arc only explains one of
+    them. The test is per piece because a door's arc is a thin blob beside a fatter keynote
+    bubble -- but the DECISION is about the whole selection, so an arc that does not span the
+    selection is a detail inside a larger shape rather than the shape itself. See
+    ARC_SPANS_SELECTION.
     """
     for c in sorted(selection.members, key=lambda c: -c.area_px):
         if not doors.thin_enough(c):
@@ -232,6 +275,10 @@ def profile_selection(
         if not doors.is_swing(arc, c.bbox_px):
             continue
         if arc.quality < MIN_ARC_QUALITY:
+            continue
+        # The arc has to be the size of what was selected, not a curve inside it.
+        span = max(selection.bbox_px[2], selection.bbox_px[3])
+        if span and arc.radius_px < ARC_SPANS_SELECTION * span:
             continue
         radius_in = arc.radius_px / dpi
 
@@ -478,16 +525,28 @@ def candidate_groups(
     and only if the group still fits inside the template's footprint afterwards. Single
     components are groups of one, so the simple case is unchanged.
 
-    Deliberately cheap and deliberately blind to the template: this runs for every component
-    on the sheet. What it cannot do is assemble a symbol from more pieces than the bound, and
-    it should not try -- greedy growth adds whichever neighbour costs the least bounding box,
-    which for a symbol in pieces walks up the nearest wall rather than towards the rest of the
-    glyph. A symbol its occluder FUSED with rather than broke is handled by `fused_windows`.
+    The bounds come from the TEMPLATE where it has something to say. A symbol drawn as
+    separate parts knows how many it has and how far apart they sit, and a global constant
+    measured on single-blob symbols cannot: the demolition door in T3's legend is a dashed arc
+    of nine pieces, which a cap of four can never assemble however close they are. A
+    single-part template keeps today's numbers exactly, so nothing already measured moves.
+
+    What this still will not do is assemble a symbol its occluder FUSED with rather than
+    broke -- that is `fused_windows` -- and it stays blind to the template's SHAPE, because it
+    runs for every component on the sheet and scoring is what judges the result.
     """
     if not candidates:
         return []
 
+    # Reach far enough to bridge this symbol's own pieces, never less than the default.
+    template = entry.template
     gap = max(3.0, GROUP_GAP_FACTOR * max(max(f) for f in entry.footprints))
+    limit = MAX_GROUP_PARTS
+    if template is not None and len(template.parts) > 1:
+        gap = max(gap, template.part_gap_px + PART_GAP_MARGIN_PX)
+        # Headroom over what the reference had: an instance can arrive in more pieces than
+        # the one that was dragged -- a dash lost to a threshold, a wall crossing one arm.
+        limit = max(limit, int(round(PART_COUNT_HEADROOM * len(template.parts))))
     boxes = np.array([c.bbox_px for c in candidates], float)
     x0, y0 = boxes[:, 0], boxes[:, 1]
     x1, y1 = x0 + boxes[:, 2], y0 + boxes[:, 3]
@@ -513,7 +572,7 @@ def candidate_groups(
         # is wrong: a group is allowed to grow to the largest footprint in the bank, so with
         # more than one scale registered the maximal group swallows its neighbours and the
         # correct, smaller reading is never offered. Emitting each step lets them compete.
-        while len(members) < MAX_GROUP_PARTS:
+        while len(members) < limit:
             near = (
                 (x0 <= bbox[0] + bbox[2] + gap)
                 & (x1 >= bbox[0] - gap)
@@ -540,9 +599,33 @@ def candidate_groups(
     return groups
 
 
+def _window_ink(host: Candidate, box: BBox) -> tuple[int, tuple[float, float]]:
+    """The ink inside one window of a host blob, and where it sits."""
+    x, y, w, h = box
+    ox, oy = host.bbox_px[0], host.bbox_px[1]
+    window = host.mask[y - oy:y - oy + h, x - ox:x - ox + w]
+    ys, xs = np.nonzero(window)
+    if not len(xs):
+        return 0, (x + w / 2.0, y + h / 2.0)
+    return len(xs), (x + float(xs.mean()), y + float(ys.mean()))
+
+
+def _boxes_overlap(a: BBox, b: BBox) -> bool:
+    return not (a[0] + a[2] <= b[0] or b[0] + b[2] <= a[0]
+                or a[1] + a[3] <= b[1] or b[1] + b[3] <= a[1])
+
+
+def _overlaps_claim(box: BBox, taken: Sequence[BBox]) -> bool:
+    return any(_boxes_overlap(box, t) for t in taken)
+
+
 def fused_windows(
-    candidate: Candidate, entry: ClassEntry, dpi: int, scorer: "Scorer"
-) -> tuple[scoring.Score, BBox] | None:
+    candidate: Candidate,
+    entry: ClassEntry,
+    dpi: int,
+    scorer: "Scorer",
+    floor: float | None = None,
+) -> list[tuple[scoring.Score, BBox]]:
     """Look for the symbol INSIDE a blob too big to be the symbol.
 
     Occlusion on these sheets is usually not a symbol broken into pieces. It is a symbol
@@ -557,57 +640,103 @@ def fused_windows(
     0.504 whole and 0.960 at its best window; (9189, 2291) scores 0.711 whole and 0.830.
 
     This is the expensive move in the pipeline, so it runs on oversized blobs alone -- a few
-    dozen on a sheet, against several thousand components.
+    hundred on a sheet, against several thousand components.
+
+    RETURNS EVERY WINDOW IT FOUND, not just the best one. A host blob is a run of wall or
+    casework with symbols drawn on it, and it holds as many instances as it holds: 6 of the 19
+    host blobs on E4 hide two receptacles each, and returning one window capped recovery at 19
+    of 25 before anything else could go wrong. Windows are returned best-first and never
+    overlap each other, so the same ink is not reported twice.
     """
     if not entry.bank:
-        return None
+        return []
+    floor = entry.symbol.review_floor if floor is None else floor
     height, width = candidate.mask.shape
-    best: tuple[scoring.Score, BBox] | None = None
+    ox, oy = candidate.bbox_px[0], candidate.bbox_px[1]
 
-    def look(fw: int, fh: int, xs: range, ys: range) -> None:
-        nonlocal best
-        for dy in ys:
-            for dx in xs:
-                sub = candidate.mask[dy:dy + fh, dx:dx + fw]
-                if not sub.any():
-                    continue
-                score = scoring.best_variant(sub, entry.bank, dpi, scorer)
-                box = (candidate.bbox_px[0] + dx, candidate.bbox_px[1] + dy, fw, fh)
-                if best is None or score.match > best[0].match:
-                    best = (score, box)
+    def score_at(fw: int, fh: int, dx: int, dy: int) -> scoring.Score | None:
+        window = candidate.mask[dy:dy + fh, dx:dx + fw]
+        if not window.any():
+            return None
+        return scoring.best_variant(window, entry.bank, dpi, scorer)
 
+    # Coarse pass. Everything that could be an instance is kept, not just the best -- which
+    # one is "best" says nothing about whether the second one is real.
+    hits: list[tuple[scoring.Score, BBox]] = []
+    top: tuple[scoring.Score, BBox] | None = None
     for fw, fh in entry.footprints:
         if fw > width or fh > height:
             continue
-        look(fw, fh, range(0, width - fw + 1, FUSED_STRIDE_PX),
-             range(0, height - fh + 1, FUSED_STRIDE_PX))
-        if best is None:
+        for dy in range(0, height - fh + 1, FUSED_STRIDE_PX):
+            for dx in range(0, width - fw + 1, FUSED_STRIDE_PX):
+                found = score_at(fw, fh, dx, dy)
+                if found is None:
+                    continue
+                if found.match >= floor:
+                    hits.append((found, (dx, dy, fw, fh)))
+                if top is None or found.match > top[0].match:
+                    top = (found, (dx, dy, fw, fh))
+
+    # If nothing cleared the floor the blob still reports its best window. That row is
+    # rejected by banding, but it is not useless: `margin` is the best score ANOTHER class got
+    # for the same ink, so a sub-floor reading of a blob is what tells a door that a marker
+    # also looked at it. Dropping these took the margin gate dark -- no detection on T5 had a
+    # runner-up -- after the fused search had been the first thing ever to make it fire.
+    if not hits and top is not None:
+        hits = [top]
+
+    # Best first, and each winner blocks the ink it sits on. Every accepted window is then
+    # refined at single-pixel steps: the window IS the box that gets reported and graded, so
+    # a 3 px offset is worth removing.
+    hits.sort(key=lambda hit: -hit[0].match)
+    taken: list[BBox] = []
+    out: list[tuple[scoring.Score, BBox]] = []
+    for found, (dx, dy, fw, fh) in hits:
+        if _overlaps_claim((dx, dy, fw, fh), taken):
             continue
-        # Single-pixel refinement around the coarse winner. The window is the box that gets
-        # reported and graded, so a 3 px offset is worth removing.
-        _, (bx, by, bw, bh) = best
-        if (bw, bh) != (fw, fh):
+        best = (found, (dx, dy, fw, fh))
+        for ry in range(max(0, dy - FUSED_STRIDE_PX),
+                        min(height - fh, dy + FUSED_STRIDE_PX) + 1):
+            for rx in range(max(0, dx - FUSED_STRIDE_PX),
+                            min(width - fw, dx + FUSED_STRIDE_PX) + 1):
+                closer = score_at(fw, fh, rx, ry)
+                if closer is not None and closer.match > best[0].match:
+                    best = (closer, (rx, ry, fw, fh))
+        window, box = best
+        if _overlaps_claim(box, taken):
             continue
-        ox, oy = bx - candidate.bbox_px[0], by - candidate.bbox_px[1]
-        look(
-            fw, fh,
-            range(max(0, ox - FUSED_STRIDE_PX), min(width - fw, ox + FUSED_STRIDE_PX) + 1),
-            range(max(0, oy - FUSED_STRIDE_PX), min(height - fh, oy + FUSED_STRIDE_PX) + 1),
-        )
-    return best
+        taken.append(box)
+        out.append((window, (ox + box[0], oy + box[1], box[2], box[3])))
+
+    return out
 
 
 def fused_blobs(candidates: Sequence[Candidate], entry: ClassEntry) -> list[Candidate]:
-    """Blobs big enough to hide the symbol, small enough to be worth searching."""
+    """Blobs big enough to hide the symbol, small enough to be worth searching.
+
+    THE CAP USED TO BE 4x THE FOOTPRINT AND THAT EXCLUDED EVERY REAL CASE. Measured against
+    E4's 36 missed duplex receptacles: 25 of them are joined to surrounding geometry, and
+    their host blobs run 5x to 49x the footprint -- so the search written to find exactly this
+    never looked at a single one of them. It had recovered one occluded marker on T5, whose
+    host happened to be small, and that lone success hid the gate.
+
+    Raising it is cheap and saturates: on E4 the pool goes 366 blobs at 4x to 460 at 32x, and
+    32x and 64x admit the same 460 because nothing bigger passes the other two tests. The
+    window scoring roughly triples, ~662k to ~1.78M, which is the whole cost of the change.
+
+    The area test reads INK, not the bounding box. A 200x200 blob of wall with a receptacle
+    on it is mostly white and cheap to search; one that is solid is a hatch fill or a filled
+    detail, and no symbol is hiding in it. Judging by box area confuses the two and spends the
+    budget on the wrong one.
+    """
     if entry.template is None or not entry.bank:
         return []
-    ink_floor = FUSED_INK_SHARE * max(int(v.mask.sum()) for v in entry.bank)
-    area_cap = MAX_FUSED_FOOTPRINTS * max(a * b for a, b in entry.footprints)
+    template_ink = max(int(v.mask.sum()) for v in entry.bank)
     return [
         c for c in candidates
-        if c.area_px >= ink_floor
+        if c.area_px >= FUSED_INK_SHARE * template_ink
         and not _fits_footprint(c.bbox_px, entry)
-        and c.bbox_px[2] * c.bbox_px[3] <= area_cap
+        and c.area_px <= MAX_FUSED_INK * template_ink
     ]
 
 
@@ -618,6 +747,7 @@ def detect(
     scorer: Scorer | None = None,
     keep_rejected: bool = False,
     regions: Sequence["regions_mod.Region"] | None = None,
+    hosts: Sequence[Candidate] = (),
 ) -> list[Detection]:
     """Score every candidate against every class and assign it to at most one.
 
@@ -634,15 +764,24 @@ def detect(
     The filter is here rather than in `find_candidates` on purpose: SELECTION still sees the
     whole sheet, so a legend entry can be dragged and a template built from it. What this
     narrows is only what gets counted.
+
+    `hosts` are components too big to be a symbol -- `candidates.host_blobs` -- searched for
+    instances welded to them and never scored whole. They are a separate argument because
+    they must not reach grouping or the size gate: a wall network is not an instance and is
+    not part of one. Passing none disables fused recovery on oversized blobs, which is what a
+    caller doing a quick pass should get.
     """
     scorer = scorer or StrokeCoverageScorer()
     if regions is not None:
         candidates = regions_mod.countable(list(regions), candidates)
+        hosts = regions_mod.countable(list(regions), list(hosts))
 
     # Score every plausible grouping, then let them compete for the ink they claim. Without
     # that, the A/T10 marker -- two components after suppression -- is counted three times:
     # once for each half and once for the pair.
-    scored: list[tuple[float, ClassEntry, scoring.Score, tuple[Candidate, ...], BBox]] = []
+    scored: list[
+        tuple[float, ClassEntry, scoring.Score, tuple[Candidate, ...], BBox, bool]
+    ] = []
     for entry in entries:
         if entry.is_arc:
             # The parametric path. An arc class is scored per component rather than per
@@ -661,7 +800,8 @@ def detect(
                     backward=arc.share,
                     variant_label=f"{entry.symbol.id}@r{arc.width_ft(raster.dpi):.1f}ft",
                 )
-                scored.append((arc.quality, entry, score, (candidate,), candidate.bbox_px))
+                scored.append(
+                    (arc.quality, entry, score, (candidate,), candidate.bbox_px, False))
             continue
 
         for members in candidate_groups(candidates, entry):
@@ -670,44 +810,68 @@ def detect(
                 continue
             best = scoring.best_variant(mask, entry.bank, raster.dpi, scorer)
             if best.match > 0:
-                scored.append((best.match, entry, best, members, bbox))
+                scored.append((best.match, entry, best, members, bbox, False))
 
         # Then the instances fused to whatever crosses them. The loop above cannot see these
         # at all -- the blob is oversized, so it never passes the size gate and is never
         # scored -- and they are most of what occlusion means on these sheets.
-        for blob in fused_blobs(candidates, entry):
-            found = fused_windows(blob, entry, raster.dpi, scorer)
-            if found is None:
-                continue
-            window, box = found
-            if window.match > 0:
-                scored.append((window.match, entry, window, (blob,), box))
+        for blob in fused_blobs([*candidates, *hosts], entry):
+            for window, box in fused_windows(blob, entry, raster.dpi, scorer):
+                if window.match > 0:
+                    scored.append((window.match, entry, window, (blob,), box, True))
 
     scored.sort(key=lambda row: (-row[0], len(row[3])))
 
     out: list[Detection] = []
     claimed: set[str] = set()
-    for match, entry, best_score, members, bbox in scored:
-        ids = {c.id for c in members}
-        if ids & claimed:
+    claimed_boxes: list[BBox] = []
+    for match, entry, best_score, members, bbox, fused in scored:
+        # WHICH INK THIS SITS ON, and WHAT IT CLAIMS, are two different questions for a
+        # fused window. It sits on the host blob -- that is what it competes with other
+        # classes for -- but it claims only the box it occupies, because one host can hide
+        # more than one instance (6 of the 19 on E4 hide two) and claiming the whole blob for
+        # the first window would hide the rest.
+        ink_ids = {c.id for c in members}
+        claim_ids = set() if fused else ink_ids
+        if claim_ids & claimed or (fused and _overlaps_claim(bbox, claimed_boxes)):
             continue
 
         # The runner-up is the best score a DIFFERENT class got for the same ink.
-        rival = next(
-            (row for row in scored if row[1].symbol.id != entry.symbol.id and {c.id for c in row[3]} & ids),
-            None,
-        )
+        def contests(row) -> bool:
+            """Is another class claiming the same ink as this detection?"""
+            if row[1].symbol.id == entry.symbol.id:
+                return False
+            if not {c.id for c in row[3]} & ink_ids:
+                return False
+            # Two windows inside one host blob only contest each other where they overlap;
+            # at opposite ends of a wall run they are looking at different symbols.
+            if fused and row[5]:
+                return _boxes_overlap(row[4], bbox)
+            return True
+
+        rival = next((row for row in scored if contests(row)), None)
         margin = None if rival is None else match - rival[0]
 
-        placed = banding.band(match, margin, entry.symbol)
+        # A fused instance can never be counted outright -- see `banding.band`.
+        placed = banding.band(
+            match, margin, entry.symbol,
+            ceiling=banding.Status.REVIEW if fused else None,
+        )
         if placed.status is banding.Status.REJECTED and not keep_rejected:
             # Rejected ink stays unclaimed: something else may legitimately explain it.
             continue
-        claimed |= ids
+        claimed |= claim_ids
 
-        ink = int(sum(c.area_px for c in members))
-        cx = sum(c.centroid_px[0] * c.area_px for c in members) / max(ink, 1)
-        cy = sum(c.centroid_px[1] * c.area_px for c in members) / max(ink, 1)
+        if fused:
+            claimed_boxes.append(bbox)
+            # The host blob is a run of wall with the symbol on it; reporting its ink and its
+            # centroid would describe the wall. Read them from the window instead, which is
+            # the part being claimed.
+            ink, (cx, cy) = _window_ink(members[0], bbox)
+        else:
+            ink = int(sum(c.area_px for c in members))
+            cx = sum(c.centroid_px[0] * c.area_px for c in members) / max(ink, 1)
+            cy = sum(c.centroid_px[1] * c.area_px for c in members) / max(ink, 1)
 
         out.append(
             Detection(
@@ -725,6 +889,7 @@ def detect(
                 backward=round(best_score.backward, 4),
                 ink_px=ink,
                 parts=len(members),
+                fused=fused,
             )
         )
 

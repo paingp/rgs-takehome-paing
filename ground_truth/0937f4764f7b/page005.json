@@ -1,12 +1,36 @@
 {
   "document": "0937f4764f7b",
-  "page": 4,
+  "page": 5,
   "dpi": 300,
   "reviewed_classes": [
     "door_swing",
     "elev_marker"
   ],
   "instances": [
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
+        7922,
+        1897,
+        138,
+        114
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
+        7997,
+        1534,
+        105,
+        135
+      ],
+      "label": "EX",
+      "occluded": false,
+      "source": "reviewed"
+    },
     {
       "class_id": "door_swing",
       "bbox_px": [
@@ -23,6 +47,18 @@
       "class_id": "door_swing",
       "bbox_px": [
         5281,
+        1558,
+        104,
+        111
+      ],
+      "label": "EX",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
+        5456,
         1558,
         104,
         111
@@ -82,18 +118,6 @@
     {
       "class_id": "door_swing",
       "bbox_px": [
-        7997,
-        1558,
-        105,
-        111
-      ],
-      "label": "EX",
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "door_swing",
-      "bbox_px": [
         8173,
         1558,
         104,
@@ -131,7 +155,7 @@
       "class_id": "door_swing",
       "bbox_px": [
         9435,
-        1956,
+        1787,
         110,
         105
       ],
@@ -142,33 +166,45 @@
     {
       "class_id": "door_swing",
       "bbox_px": [
-        4530,
-        2133,
+        9434,
+        1956,
+        111,
+        108
+      ],
+      "label": "RE/EX",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
+        9435,
+        2680,
+        112,
+        107
+      ],
+      "label": "RE/EX",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
+        7946,
+        2718,
         110,
-        110
+        111
       ],
-      "label": null,
+      "label": "WS/PA",
       "occluded": false,
       "source": "reviewed"
     },
     {
       "class_id": "door_swing",
       "bbox_px": [
-        6408,
-        2542,
-        104,
-        109
-      ],
-      "label": null,
-      "occluded": false,
-      "source": "reviewed"
-    },
-    {
-      "class_id": "door_swing",
-      "bbox_px": [
-        7006,
-        2674,
-        104,
+        7142,
+        2720,
+        114,
         109
       ],
       "label": "EX",
@@ -250,10 +286,58 @@
     {
       "class_id": "door_swing",
       "bbox_px": [
+        8883,
+        3067,
+        104,
+        110
+      ],
+      "label": "EX",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
         6904,
         3285,
         104,
         109
+      ],
+      "label": "EX",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
+        6395,
+        2915,
+        108,
+        112
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
+        6408,
+        2542,
+        104,
+        109
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
+        7220,
+        2901,
+        108,
+        126
       ],
       "label": "EX",
       "occluded": false,
@@ -274,10 +358,22 @@
     {
       "class_id": "door_swing",
       "bbox_px": [
-        9435,
-        1787,
-        114,
-        105
+        7000,
+        2674,
+        110,
+        109
+      ],
+      "label": "EX",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "door_swing",
+      "bbox_px": [
+        7060,
+        3103,
+        102,
+        112
       ],
       "label": "EX",
       "occluded": false,
@@ -289,7 +385,7 @@
         9412,
         2894,
         133,
-        150
+        112
       ],
       "label": "EX",
       "occluded": false,
@@ -298,36 +394,156 @@
     {
       "class_id": "door_swing",
       "bbox_px": [
-        5451,
-        1551,
-        114,
-        126
+        4520,
+        2129,
+        127,
+        125
       ],
       "label": null,
       "occluded": true,
       "source": "reviewed"
     },
     {
-      "class_id": "door_swing",
+      "class_id": "elev_marker",
       "bbox_px": [
-        9417,
-        2677,
+        8636,
+        1789,
         134,
-        126
+        44
       ],
-      "label": null,
+      "label": "B/T9",
       "occluded": false,
       "source": "reviewed"
     },
     {
-      "class_id": "door_swing",
+      "class_id": "elev_marker",
       "bbox_px": [
-        8876,
-        3061,
-        113,
-        120
+        4631,
+        1949,
+        133,
+        43
       ],
-      "label": null,
+      "label": "A/T12",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        8767,
+        2302,
+        47,
+        134
+      ],
+      "label": "E/T10",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        9621,
+        2498,
+        134,
+        44
+      ],
+      "label": "C/T10",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        7186,
+        2874,
+        44,
+        133
+      ],
+      "label": "D\\T9",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        6479,
+        2879,
+        44,
+        129
+      ],
+      "label": "C\\T9",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        7311,
+        2302,
+        44,
+        135
+      ],
+      "label": "A/T10",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        6546,
+        2500,
+        51,
+        149
+      ],
+      "label": "E\\T9",
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        7502,
+        2641,
+        133,
+        48
+      ],
+      "label": "B/T10",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        8636,
+        2867,
+        134,
+        50
+      ],
+      "label": "A/T9",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        7394,
+        2146,
+        51,
+        133
+      ],
+      "label": "B/T12",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "elev_marker",
+      "bbox_px": [
+        9185,
+        2299,
+        51,
+        147
+      ],
+      "label": "D/T10",
       "occluded": true,
       "source": "reviewed"
     }

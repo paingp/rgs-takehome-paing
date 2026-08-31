@@ -20,15 +20,15 @@
       <button id="next" title="Next sheet">&#8250;</button>
     </nav>
     <span class="divider"></span>
-    <button id="select-mode" class="toggle wide" title="Drag a box around a symbol (or hold Shift)">
+    <button id="select-mode" class="toggle wide" title="Drag a box around a symbol (hold Shift)">
       Select symbol
     </button>
     <button id="candidates-toggle" class="toggle wide"
-            title="Show every blob of ink the detector can even see (C)">
+            title="Show every blob of ink the detector can see (C)">
       Candidates
     </button>
     <button id="truth-toggle" class="toggle wide"
-            title="Show the recorded ground-truth boxes (G)">
+            title="Show recorded ground-truth boxes (G)">
       Ground truth
     </button>
     <button id="edit-mode" class="toggle wide"
@@ -58,19 +58,18 @@
 
     <aside id="panel">
       <h2>Selection</h2>
+
+      <!-- What the tool is doing right now. Reading a sheet is ~20 s of work that has nothing
+           to do with where the box was drawn, so it runs when the sheet opens; this is what
+           says so, and what says a drag is being answered rather than ignored. -->
+      <p id="panel-busy" hidden><span class="spinner" aria-hidden="true"></span><span id="panel-busy-text"></span></p>
+
       <div id="preview-wrap">
         <p id="panel-hint" class="muted small">
-          Turn on <b>Select symbol</b>, then drag a rough box around a door, a marker or a
-          receptacle. The box does not need to be tidy. The tool measures what you enclosed
-          to decide how to find the rest &mdash; a curve is swept for, a shape is matched.
-        </p>
-        <p id="candidates-hint" class="muted small" hidden>
-          <b>Candidates</b> shows every blob of ink the detector can see at all &mdash; the
-          connected pieces left after walls, grid lines and borders are stripped out. Nothing
-          here is matched or judged. It is the difference between <em>&ldquo;the detector
-          never saw it&rdquo;</em> and <em>&ldquo;the detector saw it and scored it
-          low&rdquo;</em>, which need opposite fixes. A symbol with no amber box around it
-          was lost before scoring began.
+          Turn on <b>Select symbol</b>, then drag a box around the symbol you want to count.
+          The tool is currently able to detect doors, detail markers, elevation markers, and
+          electrical receptacles. If a symbol has multiple disjoint parts, the pieces are
+          outlined in green; <b>click one to exclude it</b>.
         </p>
         <img id="preview" alt="Selected symbol, magnified" hidden>
       </div>
@@ -83,7 +82,7 @@
       <p id="panel-note" class="muted small" hidden></p>
 
       <section id="results" hidden>
-        <h2>Count</h2>
+        <h2>Results</h2>
         <p id="result-class" class="small"></p>
         <ul id="bands"></ul>
         <p id="result-template" class="muted small"></p>
@@ -100,6 +99,13 @@
              shared a 256 px row with four buttons and pushed the reject button off the panel
              as soon as one verdict existed. -->
         <p id="hit-tally" class="muted small"></p>
+        <!-- Not a detail. A verdict is an annotation here, which is why evaluating waits for
+             the review to be finished -- and a person pressing A a hundred times should know
+             they are building the ground truth, not just tidying a list. -->
+        <p class="muted small">
+          Accepting records the match as a real instance in this page&rsquo;s ground truth;
+          rejecting takes it back out. <b>Save truth</b> writes them to disk.
+        </p>
 
         <ol id="hits"></ol>
 
@@ -111,16 +117,19 @@
 
         <p id="review-hint" class="muted small">
           Click a row to fly to it. <b>N</b>/<b>P</b> step, <b>A</b> keeps, <b>R</b> rejects,
-          <b>F</b> fits the sheet, <b>D</b> hides the overlay. Panning and zooming stay live
-          throughout.
+          <b>F</b> fits the sheet, <b>D</b> hides the overlay.
         </p>
       </section>
 
       <section id="truth">
-        <h2>Ground truth</h2>
+        <h2>
+          Ground truth
+          <button id="truth-help" class="help" aria-pressed="false"
+                  title="Show the keys and what they do">?</button>
+        </h2>
         <div id="truth-bar">
           <button id="truth-add" class="toggle" aria-pressed="false"
-                  title="Arm missed-instance mode, then drag a box around the symbol (M)">
+                  title="Arm missed-instance mode, then drag a box around the symbol (M). Stays armed for the next one; Esc stops.">
             + Missed
           </button>
           <button id="truth-save" title="Save this page's annotations as ground truth (S)">Save truth</button>
@@ -128,17 +137,46 @@
                   title="Remove every annotation on this page — undoable, and the saved file stands until you save again">
             Clear annotations
           </button>
+          <button id="class-add"
+                  title="Name the symbol you have selected, so it can be annotated and graded">
+            + New class
+          </button>
+          <button id="class-list" class="toggle" aria-pressed="false"
+                  title="Show every class this tool can annotate and grade">
+            Classes
+          </button>
         </div>
 
-        <!-- Which colour is which class, and how many of each. Only the classes actually
-             present are listed: a legend for classes with nothing on the sheet is noise. -->
+        <!-- Naming a selection. The drag is stored as the class's anchor, which is what lets
+             it behave like a built-in: identified on other sheets, counted, and graded. -->
+        <div id="class-new" class="missed-step" hidden>
+          <label for="class-name">Name this symbol</label>
+          <input id="class-name" type="text" maxlength="60"
+                 placeholder="e.g. Supply diffuser">
+          <div id="class-new-note" class="muted small">
+            Counted on the generic thresholds until it has ground truth of its own.
+          </div>
+          <div class="missed-actions">
+            <button id="class-create">Create</button>
+            <button id="class-cancel">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Which colour is which class, and how many are recorded here. A class with none
+             gets a box to say so, which is how "none on this sheet" is told apart from
+             "nobody has looked yet". -->
         <ul id="truth-legend" hidden></ul>
+
+        <!-- Every class the tool knows, which is a different question from what is on this
+             sheet. Built-ins are marked as such: only a class somebody added can be removed. -->
+        <ul id="class-roster" hidden></ul>
 
         <!-- Armed, waiting for a drag. The box is taken exactly as drawn: a missed symbol is
              by definition one the detector has no candidate for, so there is nothing to snap
              to and snapping would refuse the gesture. -->
         <div id="missed-arm" class="missed-step" hidden>
-          Drag a box around the missed symbol. <b>Esc</b> cancels.
+          Drag a box around the missed symbol, then <b>Enter</b> to record it. Stays armed,
+          so the next drag starts the next instance. <b>Esc</b> stops.
         </div>
 
         <div id="missed-confirm" class="missed-step" hidden>
@@ -184,52 +222,58 @@
         </div>
 
         <span id="truth-state" class="muted small"></span>
-        <p class="muted small">
-          <b>Reset</b> hides the recorded boxes along with clearing the count; it never removes
-          them. <b>Clear annotations</b> is the button that does &mdash; undoably, and without
-          touching the saved file, which stands until you save again.
-          <b>G</b> shows the recorded boxes, one colour per class; <b>E</b> edits them. Click one to select it, drag
-          a handle to resize, change its class or occlusion above, <b>Del</b> to remove it. The
-          detection&rsquo;s own box never moves &mdash; what this corrects is the annotation, and
-          the harness grades against that.
-        </p>
-        <p class="muted small">
-          Accepting a hit with <b>A</b> records it as real. <b>M</b> arms &ldquo;+ Missed&rdquo;
-          &mdash; drag a box, pick the class and whether anything crosses it, confirm &mdash;
-          which is the half no
-          accept/reject can produce. <b>O</b> marks an instance occluded: a wall, note or
-          dimension crosses it. That is the axis graded separately, and it is set by eye
-          rather than inferred from whether the tool found it. <b>S</b> saves.
-        </p>
+        <div id="truth-help-text" class="muted small" hidden>
+          <p>
+            <b>G</b> show &middot; <b>E</b> edit &middot; <b>M</b> record a missed one &middot;
+            <b>O</b> occluded &middot; <b>Del</b> remove &middot; <b>S</b> save
+          </p>
+          <p>
+            <b>+ Missed</b> is the half no accept or reject can produce: drag, <b>Enter</b>,
+            drag, <b>Enter</b> &mdash; it stays armed until <b>Esc</b>. Editing corrects the
+            annotation, never the detection&rsquo;s own box, because the annotation is what
+            grading measures against.
+          </p>
+          <p>
+            <b>Occluded</b> means a wall, note or dimension crosses the symbol. It is set by
+            eye rather than inferred from whether the tool found it, and it is graded as its
+            own number.
+          </p>
+          <p>
+            <b>Reset</b> only hides these boxes. <b>Clear annotations</b> removes them &mdash;
+            undoably, and the saved file stands until you save again.
+          </p>
+        </div>
       </section>
-
       <!-- What the last graded run found, drawn on the sheet it found it on. A false
            positive is a claim about a piece of ink, so the only place it can be judged is
            on top of that ink. -->
       <section id="grade">
-        <h2>Grading</h2>
+        <h2>Evaluation</h2>
         <div id="grade-bar">
-          <button id="grade-toggle" class="toggle" aria-pressed="false"
-                  title="Draw the last graded run over the sheet (V)">
-            Show grading
+          <button id="grade-evaluate"
+                  title="Score what was just counted against this page's ground truth (V)">
+            Evaluate
           </button>
         </div>
+
+        <!-- The reminder lives HERE, next to the button that triggers it. It used to go to
+             the panel note at the top of the Selection section, which on a page with results
+             is a thousand pixels above the Evaluate button -- so pressing Evaluate looked
+             like it did nothing at all. -->
+        <p id="grade-warn" class="warn small" hidden></p>
+        <!-- What you decided, counted the way the bands above are counted. Green and red
+             because they are verdicts, not scores. -->
+        <ul id="verdict-tally"></ul>
         <p id="grade-state" class="muted small"></p>
         <ul id="grade-list"></ul>
         <p class="muted small">
-          <b>V</b> draws the last run of
-          <code>python -m eval.suites --page N</code>: green found it, orange-red got it
-          wrong or lost it, amber sent it to review. Click any row to fly to the ink. This is
-          read from <code>eval/reports/</code> rather than graded live &mdash; a run costs a
-          full detection pass, and the tool should not have two places where one happens.
+          Scores this page's count against its annotations, once every match has been accepted
+          or rejected. What you accepted is what the tool found &mdash; whichever band it came
+          from &mdash; and what you rejected is a false positive. Click a missed row to fly to
+          the ink.
         </p>
       </section>
 
-      <p class="muted small footnote">
-        Two symbol classes are registered. The margin gate fires only where they claim the
-        same ink &mdash; which happens where a marker is found inside a blob it was fused to.
-        The nested-symbol case it was built for, duplex inside quad, is still untested.
-      </p>
     </aside>
   </main>
 

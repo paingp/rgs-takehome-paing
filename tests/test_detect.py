@@ -197,23 +197,33 @@ def test_the_anchor_rebuilds_the_marker_the_selection_would_give(marker_entry) -
 
 
 def test_elevation_marker_end_to_end_on_t5(t5, marker_entry) -> None:
-    """Ten instances clear the counted gate, and all ten are real.
+    """Nine instances clear the counted gate, and all nine are real.
 
     These numbers are no longer the detector's own: T5 is annotated, and `-m eval.suites
-    --page 5` scores this class 10 TP / 0 FP / 2 FN against 12 reviewed instances. The test
-    pins the *separation*, which is the property that would silently rot -- the counted set
-    must stay well clear of the best thing that is not a marker.
+    --page 5` scores this class 9 TP / 0 FP / 3 FN against 12 reviewed instances, with both
+    remaining instances found and sent to review. The test pins the *separation*, which is
+    the property that would silently rot -- the counted set must stay well clear of the best
+    thing that is not a marker.
 
-    Nine before `fused_windows`. The tenth is the marker at (6552, 2509) that a leader line
-    is drawn through: its blob is 116x146 px against a 44x129 marker, so the size gate
-    refused it and nothing scored it at all. Searched inside, it scores 0.961.
+    It was ten for a while. The tenth is the marker at (6552, 2509) that a leader line is
+    drawn through: its blob is 116x146 px against a 44x129 marker, so the size gate refuses
+    it and nothing scores it whole. `fused_windows` searches inside and finds it at 0.961 --
+    and a fused instance is now capped at REVIEW however well it scores, because the window
+    that scored was chosen by the search and is the best of many tries rather than one honest
+    reading. Found, not counted, and a person confirms it. See `banding.band`'s `ceiling`.
     """
     r, found = t5
     results = detect.detect(r, found, [marker_entry], keep_rejected=True)
 
     counted = [d for d in results if d.status is banding.Status.COUNTED]
-    assert len(counted) == 10, [(d.match, d.bbox_px) for d in counted]
+    assert len(counted) == 9, [(d.match, d.bbox_px) for d in counted]
     assert all(d.match >= 0.90 for d in counted)
+    assert not any(d.fused for d in counted), "a fused instance may never be counted"
+
+    # The occluded one is still found, which is the property the fused search exists for.
+    recovered = [d for d in results if d.fused and d.match > 0.95]
+    assert recovered, "the fused search must still reach the occluded marker"
+    assert all(d.status is banding.Status.REVIEW for d in recovered)
 
     # One of them is the A/T9 marker with a line drawn through it. Ink repair is what makes
     # it findable at all; before, it was not even a candidate.
@@ -222,8 +232,12 @@ def test_elevation_marker_end_to_end_on_t5(t5, marker_entry) -> None:
     # What sits just below the gate is no longer junk: it is B/T12, a real marker that a
     # line was drawn through, held at 0.868 for review rather than counted or lost. That is
     # the intended handling of an instance the tool can only partly see.
+    #
+    # Judged on whole components only. A fused window scores higher than this -- the search
+    # picks its best position -- and mixing the two would compare a chosen score against an
+    # unchosen one.
     others = sorted(
-        (d for d in results if d.status is not banding.Status.COUNTED),
+        (d for d in results if d.status is not banding.Status.COUNTED and not d.fused),
         key=lambda d: -d.match,
     )
     assert others, "the size gate should still admit some non-markers to score"
@@ -232,6 +246,84 @@ def test_elevation_marker_end_to_end_on_t5(t5, marker_entry) -> None:
 
     # The marker the template came from must count as an instance of itself.
     assert any(d.bbox_px == T5_MARKER_BBOX for d in counted)
+
+
+def test_a_fused_instance_can_never_be_counted(t5, marker_entry) -> None:
+    """The precision guarantee, stated where it cannot quietly lapse.
+
+    A window found inside a larger blob was chosen by the search: its score is the best of
+    hundreds of positions, not one reading of one component, so it does not mean what a
+    class's gate was tuned to mean. Counting them outright would spend precision -- the one
+    property this detector has that is worth 1.000 on two of three graded sheets -- to buy
+    recall that a person can confirm instead.
+    """
+    r, found = t5
+    results = detect.detect(r, found, [marker_entry], keep_rejected=True)
+    fused = [d for d in results if d.fused]
+
+    assert fused, "the fused search must find something on T5"
+    assert max(d.match for d in fused) > marker_entry.symbol.counted_at,         "and at least one must score well enough that only the ceiling holds it back"
+    assert all(d.status is not banding.Status.COUNTED for d in fused)
+    assert all("held at review" in (d.reason or "") for d in fused
+               if d.status is banding.Status.REVIEW and d.match >= marker_entry.symbol.counted_at)
+
+
+def test_the_fused_search_looks_in_blobs_the_size_gate_threw_away(t5, marker_entry) -> None:
+    """Where the recoveries actually come from.
+
+    `find_candidates` stops at 0.67 in, and a symbol drawn touching a wall belongs to the
+    wall's component -- which is bigger than that and so was never in the pool the fused
+    search filtered. Measured on E4: 25 of 36 missed receptacles sit in hosts running 108-421
+    px against a 201 px band top, and raising the fused search's own cap without this reached
+    4 of them.
+    """
+    r, found = t5
+    hosts = cand.host_blobs(r, cand.ink_layers(r))
+    assert hosts, "T5 has components above the symbol band"
+    assert all(max(c.bbox_px[2], c.bbox_px[3]) > cand.SYMBOL_BAND_IN[1] * r.dpi for c in hosts)
+    assert not ({c.id for c in hosts} & {c.id for c in found}), "hosts are not candidates"
+
+    # They reach the fused search and nothing else: a host must never be scored whole, and
+    # must never be grouped with a real candidate.
+    searched = {c.id for c in detect.fused_blobs([*found, *hosts], marker_entry)}
+    assert searched & {c.id for c in hosts}, "hosts must reach the search"
+    for members in detect.candidate_groups(hosts, marker_entry):
+        raise AssertionError("a host blob must never be grouped as an instance")
+
+
+def test_two_instances_in_one_host_blob_are_both_found(t5) -> None:
+    """One window per blob was not enough.
+
+    A host blob is a run of wall with symbols drawn on it, and it holds as many as it holds --
+    6 of the 19 host blobs on E4 hide two receptacles each. `fused_windows` returned only its
+    best window, and the assignment loop then claimed the whole blob by id, so the second
+    instance was unreachable twice over.
+    """
+    r, found = t5
+    marker = classes.ELEVATION_MARKER
+    entry = detect.build_entry(marker, r, found)
+
+    # Two copies of the glyph, joined by a bar, in one component.
+    glyph = next(c for c in found if c.bbox_px == T5_MARKER_BBOX)
+    gw, gh = glyph.bbox_px[2], glyph.bbox_px[3]
+    canvas = np.zeros((gh + 20, gw * 2 + 60), bool)
+    canvas[10:10 + gh, 10:10 + gw] = glyph.mask
+    canvas[10:10 + gh, gw + 50:gw + 50 + gw] = glyph.mask
+    canvas[10 + gh // 2, :] = True                      # the bar that welds them together
+
+    host = cand.Candidate(
+        id="host", bbox_px=(0, 0, canvas.shape[1], canvas.shape[0]),
+        centroid_px=(canvas.shape[1] / 2, canvas.shape[0] / 2), mask=canvas,
+        patch=np.zeros(canvas.shape, np.uint8), area_px=int(canvas.sum()), raw_id=1,
+    )
+
+    windows = detect.fused_windows(host, entry, r.dpi, scoring.StrokeCoverageScorer())
+    assert len(windows) >= 2, [round(s.match, 3) for s, _ in windows]
+    assert all(s.match >= marker.review_floor for s, _ in windows)
+    boxes = [b for _, b in windows]
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1:]:
+            assert not detect._boxes_overlap(a, b), "windows must not claim the same ink"
 
 
 def test_the_marker_is_found_at_several_orientations(t5, marker_entry) -> None:
@@ -299,53 +391,100 @@ T5_MARKER_DRAGS = {
 }
 
 
-def test_template_keeps_only_the_largest_connected_glyph(t5) -> None:
-    r, found = t5
-    selection = cand.snap(found, T5_MARKER_DRAGS["with label"], dpi=r.dpi)
-    assert len(selection.members) == 6, "the drag really does enclose the label"
+def test_the_template_is_every_piece_of_geometry_the_box_held(t5) -> None:
+    """The drag is the boundary for GEOMETRY; a caption is not geometry.
 
-    template = templates.Template.from_selection("elev_marker", selection, page_index=4)
-    assert template.size_px == (44, 129)
-    assert template.source_bbox_px == T5_MARKER_BBOX
-    assert template.trimmed and template.context_blobs == 5
-    assert template.context_ink_px > 0
+    It used to keep the largest piece plus whatever the drawing had joined to it, which is
+    wrong for any symbol drawn as separate parts -- a supply diffuser (four corner brackets
+    around an X) lost 64% of its ink that way and a demolition door's dashed arc lost 63%.
 
-
-def test_dragging_in_the_label_does_not_change_the_count(t5) -> None:
-    """The bug this pins: a six-blob template reported nothing and could not say why."""
-    r, found = t5
-    runs = {}
-    for label, drag in T5_MARKER_DRAGS.items():
-        selection = cand.snap(found, drag, dpi=r.dpi)
-        entry = detect.entry_from_selection("elev_marker", selection, page_index=r.page_index)
-        runs[label] = [d.id for d in detect.detect(r, found, [entry])]
-
-    # 18, of which 13 come from whole components and 5 from windows inside blobs too big
-    # to be a marker. What the test is for is the agreement below, not the count: all three
-    # drags must produce the SAME instances, whatever the detector currently finds.
-    assert len(runs["glyph only"]) == 18
-    assert runs["with label"] == runs["glyph only"] == runs["generous"]
-
-
-def test_a_multi_blob_template_would_be_unmatchable(t5) -> None:
-    """Why from_selection trims at all, stated as a measurement rather than a belief.
-
-    detect() scores one connected component at a time, so a template spanning disconnected
-    blobs has no candidate that could represent it -- not a low score, an impossible one.
+    The A/T10 marker is the case on this sheet: a centre line runs through its apex, gets
+    removed as structure, and leaves two halves that are both the symbol.
     """
     r, found = t5
-    selection = cand.snap(found, T5_MARKER_DRAGS["with label"], dpi=r.dpi)
-    whole = templates.Template(
-        class_id="elev_marker",
-        mask=selection.mask,
-        dpi=r.dpi,
-        source_page_index=4,
-        source_bbox_px=selection.bbox_px,
-    )
-    bank = templates.variants(whole)
-    scorer = scoring.StrokeCoverageScorer()
-    best = max(scoring.best_variant(c.mask, bank, r.dpi, scorer).match for c in found)
-    assert best < classes.ELEVATION_MARKER.review_floor, best
+    selection = cand.snap(found, (7300, 2292, 65, 155), dpi=r.dpi)
+    assert len(selection.members) == 2, "suppression really did split it"
+
+    template = templates.Template.from_selection("elev_marker", selection, page_index=4)
+    assert template.size_px == (44, 135), "both halves, not the larger one"
+    assert len(template.parts) == 2
+    assert not template.trimmed and template.context_blobs == 0
+
+
+def test_a_label_in_the_box_does_not_change_the_count(t5) -> None:
+    """Dragging sloppily over a marker's sheet reference must not cost the count.
+
+    It did, for one day: the drag became the boundary for everything inside it, so the label
+    joined the template and 10 counted became 1. The rule is now that a line of characters
+    which does not include the symbol is not the symbol -- see
+    `candidates.inside_minus_foreign_text`.
+    """
+    r, found = t5
+
+    def count(selection):
+        entry = detect.entry_from_selection("elev_marker", selection, page_index=r.page_index)
+        return sum(1 for d in detect.detect(r, found, [entry])
+                   if d.status is banding.Status.COUNTED)
+
+    tight = cand.snap(found, T5_MARKER_DRAGS["glyph only"], dpi=r.dpi)
+    sloppy = cand.snap(found, T5_MARKER_DRAGS["with label"], dpi=r.dpi)
+    assert len(sloppy.members) == 1, "the label was dropped, not kept and matched"
+    assert count(sloppy) == count(tight) == 9
+
+
+# The other marker on T5, and a harder case than `C/T9`. It points left, its glyph is 44 px
+# tall against 24 px letters, and the word `FILM` is printed in the empty wedge beneath it.
+B_T9_DRAGS = {
+    "glyph only": (8630, 1783, 146, 56),
+    "with label": (8606, 1749, 194, 134),
+}
+
+
+def test_a_caption_beside_a_squat_glyph_is_still_dropped(t5) -> None:
+    """A glyph can chain into the line of text it labels, and then protect it.
+
+    `C/T9` is dropped because the run of characters does not include the symbol. That test
+    passes on a marker three times a letter's height. This one is 44 px against 24 -- a ratio
+    of 1.83, which any height band loose enough for real text will accept -- and the letters
+    sit close enough to share a baseline with it. So the glyph joined the run, the run
+    therefore "included the symbol", and `FILM` plus four dashes went into the template: 9
+    counted became 0.
+
+    The fix is to judge the line with the symbol set aside, and drop it only if every
+    character is small beside the symbol. See `candidates.RUN_SIZE_RATIO`.
+    """
+    r, found = t5
+
+    def count(selection):
+        entry = detect.entry_from_selection("elev_marker", selection, page_index=r.page_index)
+        return sum(1 for d in detect.detect(r, found, [entry])
+                   if d.status is banding.Status.COUNTED)
+
+    tight = cand.snap(found, B_T9_DRAGS["glyph only"], dpi=r.dpi)
+    sloppy = cand.snap(found, B_T9_DRAGS["with label"], dpi=r.dpi)
+    assert len(sloppy.members) == 1, "the caption was dropped, not kept and matched"
+    assert count(sloppy) == count(tight) == 8
+
+
+def test_a_multi_blob_template_is_matchable_now(t5) -> None:
+    """It was not, and that is why the template used to be trimmed to one blob.
+
+    `detect` scored one connected component at a time, so a template spanning disconnected
+    blobs had nothing that could represent it -- not a low score, an impossible one, measured
+    at 0.780 against 4,770 candidates. Group matching is what changed: the pieces are
+    assembled and scored together, which is what lets a diffuser or a dashed arc be counted
+    at all. See tests/test_multipart.py.
+    """
+    r, found = t5
+    selection = cand.snap(found, (7300, 2292, 65, 155), dpi=r.dpi)
+    assert len(selection.members) == 2
+
+    entry = detect.entry_from_selection(
+        "elev_marker", selection, page_index=4, symbol=classes.ELEVATION_MARKER)
+    counted = [d for d in detect.detect(r, found, [entry])
+               if d.status is banding.Status.COUNTED]
+    assert len(counted) == 8
+    assert any(d.parts > 1 for d in counted), "at least one was assembled from its pieces"
 
 
 def test_a_template_matches_the_glyph_it_was_cut_from(t5) -> None:
@@ -355,11 +494,33 @@ def test_a_template_matches_the_glyph_it_was_cut_from(t5) -> None:
         entry = detect.entry_from_selection(
             "elev_marker", cand.snap(found, drag, dpi=r.dpi), page_index=r.page_index
         )
-        source = next(c for c in found if c.bbox_px == entry.template.source_bbox_px)
+        selection = cand.snap(found, drag, dpi=r.dpi)
         best = scoring.best_variant(
-            source.mask, entry.bank, r.dpi, scoring.StrokeCoverageScorer()
+            selection.mask, entry.bank, r.dpi, scoring.StrokeCoverageScorer()
         )
         assert best.match == pytest.approx(1.0), (drag, best)
+
+
+def test_a_label_in_the_box_costs_the_class_its_name_until_excluded(t5) -> None:
+    """The price of letting the drag decide, stated plainly.
+
+    Identification compares what was selected against each registered class's reference. A
+    drag that also caught the `C/T9` sheet reference is glyph-plus-label, which matches no
+    reference, so the symbol comes back unnamed and loses that class's caption pattern and
+    its calibrated thresholds. Dropping the label pieces is what gives them back -- which is
+    why the server applies exclusions BEFORE identifying, not after.
+    """
+    r, found = t5
+    library = {"elev_marker": detect.build_entry(classes.ELEVATION_MARKER, r, found)}
+
+    sloppy = cand.snap(found, T5_MARKER_DRAGS["with label"], dpi=r.dpi)
+    guess, _ = detect.identify(sloppy, r, found, references=library)
+    assert guess.id == "elev_marker", "a caption in the box must not cost the class its name"
+
+    # And the mechanism for dropping a piece by hand still works, for the pieces no rule can
+    # judge -- a leader arrow, a dimension tick, anything that is not a line of characters.
+    split = cand.snap(found, (7300, 2292, 65, 155), dpi=r.dpi)
+    assert len(split.without([1]).members) == 1
 
 
 # --------------------------------------------------------------- a zero explains itself
@@ -379,11 +540,13 @@ def test_diagnose_is_quiet_when_there_is_something_to_report(t5, marker_entry) -
     assert real["note"] is None
 
 
-def test_diagnose_mentions_the_ignored_context(t5) -> None:
+def test_nothing_inside_the_box_is_quietly_ignored(t5) -> None:
+    """There is no "context" any more: what the box held is what gets matched."""
     r, found = t5
     selection = cand.snap(found, T5_MARKER_DRAGS["with label"], dpi=r.dpi)
     entry = detect.entry_from_selection("elev_marker", selection, page_index=r.page_index)
-    assert "separate piece" in detect.diagnose(r, found, entry, [])["note"]
+    assert entry.template.context_blobs == 0
+    assert "separate piece" not in detect.diagnose(r, found, entry, [])["note"]
 
 
 # ------------------------------------------------ a glyph that line suppression split apart
@@ -489,13 +652,23 @@ def test_a_split_glyph_selects_whole_not_halved(t5_unrepaired) -> None:
     assert template.context_blobs == 0, "neither half is context; both are the symbol"
 
 
-def test_the_label_is_still_context_even_though_it_sits_closer(t5) -> None:
-    """The other half of the rule: proximity alone would have kept the label."""
+def test_the_pieces_a_selection_holds_are_reported_and_removable(t5) -> None:
+    """What the viewer draws, and what a click acts on.
+
+    The label is gone before this point -- a run of characters without the symbol in it is
+    dropped -- so what remains to be shown are pieces of geometry, and the click exists for
+    the ones no rule can judge.
+    """
     r, found = t5
-    selection = cand.snap(found, (6470, 2870, 105, 148), dpi=r.dpi)
-    template = templates.Template.from_selection("elev_marker", selection, page_index=4)
-    assert template.size_px == (44, 129)
-    assert template.context_blobs == 5
+    selection = cand.snap(found, (7300, 2292, 65, 155), dpi=r.dpi)
+    assert len(selection.parts_px) == 2
+    # Largest INK first, not largest box: a thin curve can outrun a dense glyph's bounds.
+    assert selection.members[0].area_px == max(c.area_px for c in selection.members)
+    assert selection.parts_px[0] == selection.members[0].bbox_px
+
+    kept = selection.without([1])
+    assert len(kept.members) == 1
+    assert kept.bbox_px == selection.members[0].bbox_px
 
 
 def test_raw_id_separates_a_split_glyph_from_a_neighbouring_label(t5_unrepaired) -> None:
@@ -515,7 +688,6 @@ def test_every_route_to_the_same_marker_counts_the_same(t5) -> None:
     r, found = t5
     drags = [
         (6470, 2870, 62, 148),    # C\T9, tight
-        (6470, 2870, 105, 148),   # C\T9 with its label
         (7300, 2292, 65, 155),    # A/T10, the split one
         (7280, 2270, 95, 190),    # A/T10, sloppy
     ]
@@ -545,7 +717,7 @@ def test_identify_recognises_a_marker_and_a_door_from_the_drag_alone(t5, t5_unre
     on repaired -- which is what the server does once the class is known.
     """
     for fixture, cases in (
-        (t5, (((6470, 2870, 105, 148), "elev_marker"),
+        (t5, (((6470, 2870, 62, 148), "elev_marker"),
               ((7300, 2292, 65, 155), "elev_marker"))),
         (t5_unrepaired, (((6360, 2890, 155, 165), "door_swing"),
                          ((4790, 1540, 150, 150), "door_swing"))),
@@ -562,7 +734,7 @@ def test_a_marker_selection_is_never_counted_as_a_door(t5) -> None:
     it still said `door_swing` applied the door's 0.80/0.60 thresholds to a triangle, giving
     11 counted instead of 8 and 32 in review instead of 3, every result labelled a door."""
     r, found = t5
-    selection = cand.snap(found, (6470, 2870, 105, 148), dpi=r.dpi)
+    selection = cand.snap(found, (6470, 2870, 62, 148), dpi=r.dpi)
 
     wrong = classes.get("door_swing")
     mislabelled = detect.detect(
@@ -577,7 +749,7 @@ def test_a_marker_selection_is_never_counted_as_a_door(t5) -> None:
     )
     counted = [d for d in right if d.status is banding.Status.COUNTED]
     assert symbol.id == "elev_marker"
-    assert len(counted) == 10
+    assert len(counted) == 9
     assert {d.class_id for d in right} == {"elev_marker"}
 
 
@@ -602,3 +774,85 @@ def test_identifying_does_not_depend_on_which_instance_was_dragged(t5_unrepaired
         m = int(0.2 * max(w, h))
         sel = cand.snap(found, (x - m, y - m, w + 2 * m, h + 2 * m), dpi=r.dpi)
         assert detect.identify(sel, r, found)[0].id == "door_swing", d.bbox_px
+
+
+# ---------------------------------------------------------------- the detail marker, on T9
+
+T9 = 8  # the sheet the detail marker is anchored on
+
+
+@pytest.fixture(scope="module")
+def t9() -> tuple[Raster, list[cand.Candidate]]:
+    r = render(PDF, T9, dpi=300)
+    return r, cand.find_candidates(r, cand.ink_layers(r))
+
+
+@pytest.fixture(scope="module")
+def detail_entry(t9) -> detect.ClassEntry:
+    r, found = t9
+    return detect.build_entry(classes.DETAIL_MARKER, r, found)
+
+
+def test_detail_marker_separates_from_everything_else_on_its_sheet(t9, detail_entry) -> None:
+    """Five instances on T9, and the best non-marker is 0.34 of score away.
+
+    This is the widest separation of any class here, and the reason is worth writing down:
+    the glyph is three features at once -- a circle, a bar across it, and a hatched wedge
+    fused to its side -- and nothing else on an architectural sheet carries all three. The
+    thresholds were set from this gap rather than from the 0.90/0.80 defaults a class gets
+    when it is named in the viewer.
+
+    The test pins the SEPARATION rather than the count, because that is the property that
+    would rot quietly. A change that costs 0.05 of score on real markers is invisible in a
+    count of five until the day it takes one.
+    """
+    r, found = t9
+    hits = detect.detect(r, found, [detail_entry], keep_rejected=True)
+    counted = [d for d in hits if d.status is banding.Status.COUNTED]
+    rest = [d for d in hits if d.status is not banding.Status.COUNTED]
+
+    assert len(counted) == 5
+    assert min(d.match for d in counted) > 0.97
+    assert max(d.match for d in rest) < 0.60
+    assert min(d.match for d in counted) - max(d.match for d in rest) > 0.30
+
+
+def test_the_detail_number_inside_the_circle_does_not_have_to_match(t9, detail_entry) -> None:
+    """The template carries a `4`, and the markers it finds carry 4, 7 and 1.
+
+    The reference is drawn INSIDE the glyph -- detail number over sheet number, split by the
+    bar -- so unlike every other class here the template cannot be separated from one
+    instance's caption. The caption filter takes the two-line sheet number out as a run of
+    characters and leaves the single digit in, because a lone character beside a symbol is
+    not a caption by any measure the filter has.
+
+    That is tolerable and this test says why: the digit is 210 px of ink against 3,626 for
+    the glyph, so an instance with a different number still scores 0.977 or better. If that
+    ever stops being true, this fails before a count does.
+    """
+    r, found = t9
+    template_ink = int(detail_entry.template.mask.sum())
+    hits = [d for d in detect.detect(r, found, [detail_entry])
+            if d.status is banding.Status.COUNTED]
+
+    # The one at (8678, 2047) reads `7 / T11` where the template reads `4 / T12`.
+    odd = [d for d in hits if abs(d.bbox_px[0] - 8678) < 20]
+    assert odd, "the 7/T11 marker should be found"
+    assert odd[0].match > 0.97
+    assert template_ink > 3000, "a digit is a small share of this much ink"
+
+
+def test_the_detail_marker_does_not_take_the_elevation_marker(t5, marker_entry, detail_entry) -> None:
+    """Both carry the same hatched wedge, and T5 has elevation markers and no detail ones.
+
+    This is the case the margin gate exists for, so it is worth running the two together
+    rather than trusting that a 0.34 gap on one sheet holds on another. Nothing on T5 may be
+    counted as a detail marker, and the elevation markers must keep their count.
+    """
+    r, found = t5
+    hits = detect.detect(r, found, [marker_entry, detail_entry])
+    assert not [d for d in hits if d.class_id == "detail_marker"]
+
+    markers = [d for d in hits
+               if d.class_id == "elev_marker" and d.status is banding.Status.COUNTED]
+    assert len(markers) == 9

@@ -1,0 +1,143 @@
+{
+  "document": "0937f4764f7b",
+  "page": 9,
+  "dpi": 300,
+  "reviewed_classes": [
+    "detail_marker",
+    "selection"
+  ],
+  "instances": [
+    {
+      "class_id": "selection",
+      "bbox_px": [
+        4656,
+        4583,
+        146,
+        178
+      ],
+      "label": "4",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "selection",
+      "bbox_px": [
+        7330,
+        4583,
+        145,
+        177
+      ],
+      "label": "4",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "selection",
+      "bbox_px": [
+        6002,
+        1602,
+        146,
+        176
+      ],
+      "label": "4",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "selection",
+      "bbox_px": [
+        4407,
+        1702,
+        146,
+        178
+      ],
+      "label": "4",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "selection",
+      "bbox_px": [
+        8678,
+        2047,
+        146,
+        177
+      ],
+      "label": "7",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        4407,
+        1702,
+        146,
+        178
+      ],
+      "label": "T12",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        4656,
+        4583,
+        146,
+        178
+      ],
+      "label": "T12",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        7330,
+        4583,
+        145,
+        177
+      ],
+      "label": "T12",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        6002,
+        1602,
+        146,
+        176
+      ],
+      "label": "T12",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        8678,
+        2047,
+        146,
+        177
+      ],
+      "label": "T11",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "detail_marker",
+      "bbox_px": [
+        9257,
+        4870,
+        148,
+        189
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    }
+  ]
+}

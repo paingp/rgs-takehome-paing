@@ -41,31 +41,56 @@ JOIN_GAP_FACTOR = 0.12
 class Template:
     """One class's reference ink, tight to its bounding box.
 
-    The mask is the glyph the person pointed at -- the largest piece of ink in the selection
-    together with every piece that was joined to it on the drawing before line suppression
-    ran -- and not everything the selection happened to enclose. A template that spans ink
-    the drawing never joined has nothing that could match it: measured on T5, the best score
-    available to any of 4,770 candidates against a six-blob template was 0.780, below even
-    the review floor. A template like that reports nothing and cannot say why.
+    THE DRAG IS THE BOUNDARY. The mask is every piece of ink the selection enclosed, because
+    a symbol is not always one connected thing and a drawing decides that, not us: a supply
+    diffuser is a square drawn as four separate corner brackets around an X, and a door marked
+    for demolition is a DASHED arc -- nine pieces, none touching, spanning 37x in size from a
+    594 px leaf to 16 px dashes.
 
-    What the selection held besides the glyph is kept as `context_*` rather than thrown away.
-    On the T5 elevation marker that is the `C\\T9` sheet reference sitting 14 px off the
-    triangle -- genuinely part of the annotation, and genuinely different on every instance,
-    so it identifies a marker but can never help match one.
+    This used to keep only the largest piece plus whatever the drawing had joined to it before
+    line suppression, which discarded 64% of the diffuser's ink and 63% of the demo door's,
+    and then counted one instance: itself. Three rules for telling a symbol's parts from an
+    annotation beside it were measured and all three failed -- joined ink misses both cases,
+    size comparability breaks on the demo door's 37x spread, and text-run grouping splits the
+    diffuser into two "runs" and keeps none of it. There is no reliable way to guess, so the
+    box a person drew decides, and the viewer shows what was taken.
+
+    `parts` is what the selection held, in template coordinates. Matching needs it: a symbol
+    whose pieces sit 30 px apart cannot be assembled by a grouping reach derived from a global
+    constant, but it can be assembled by the spacing this template actually has.
     """
 
     class_id: str
-    mask: np.ndarray          # bool, (H, W) -- the matchable glyph, one connected component
+    mask: np.ndarray          # bool, (H, W) -- every piece the selection enclosed
     dpi: int
     source_page_index: int
     source_bbox_px: BBox      # where `mask` sits, not where the selection sat
-    context_blobs: int = 0    # disconnected pieces the selection held and matching ignores
+    parts: tuple[BBox, ...] = ()   # the pieces, relative to source_bbox_px
+    context_blobs: int = 0    # kept at 0: nothing inside the drag is context any more
     context_ink_px: int = 0
 
     @property
     def trimmed(self) -> bool:
-        """True when the selection held more than the glyph that will actually be matched."""
+        """Whether anything inside the drag was left out of the template. Now always False."""
         return self.context_blobs > 0
+
+    @property
+    def part_gap_px(self) -> float:
+        """How far apart this symbol's pieces sit -- the reach needed to assemble one.
+
+        The largest nearest-neighbour distance over the parts, so a template made of pieces
+        30 px apart says so, and grouping does not have to guess it from a global factor that
+        was measured on symbols made of one blob.
+        """
+        if len(self.parts) < 2:
+            return 0.0
+        worst = 0.0
+        for i, a in enumerate(self.parts):
+            nearest = min(
+                _box_gap(a, b) for j, b in enumerate(self.parts) if j != i
+            )
+            worst = max(worst, nearest)
+        return worst
 
     @property
     def size_px(self) -> tuple[int, int]:
@@ -87,65 +112,42 @@ class Template:
 
     @classmethod
     def from_selection(cls, class_id: str, selection: Selection, page_index: int) -> "Template":
-        """Take the glyph the person pointed at; count anything else as context.
+        """Every piece the selection enclosed, as one template.
 
-        The glyph is the largest piece of ink in the selection PLUS every other piece that
-        was joined to it on the drawing, before line suppression ran. `Candidate.raw_id`
-        carries that: two pieces sharing one mean suppression pulled a single blob apart by
-        removing a line drawn across it.
+        `snap` has already resolved what the drag means -- everything substantially inside it,
+        less any text run that continues past its edge -- and built the union mask. So this is
+        that mask, and the only work here is recording where the pieces sit.
 
-        The A/T10 marker on T5 is exactly this. A centre line runs through its apex, gets
-        removed as structure, and takes the apex junction with it, leaving two halves 6 px
-        apart. Keeping only the larger half made a template of half a triangle -- 0.143 x
-        0.220 in instead of 0.143 x 0.427 -- which then counted each half of every marker
-        separately. The label beside a marker is a different case and still drops out: it was
-        never joined to the glyph, so its raw_id differs and no distance threshold is needed
-        to tell the two apart.
-
-        Largest by ink, not by bounding box: a sheet reference set in small type can outrun a
-        thin glyph's box while carrying a fraction of its ink.
+        The A/T10 marker on T5 still works, and for a better reason than before: its two halves
+        (a centre line was drawn through its apex and removed as structure) are both inside the
+        drag, so both are in the template. That case used to need a rule about joined ink; now
+        it needs nothing.
         """
         if selection.is_empty:
             raise ValueError(f"cannot build a template for {class_id!r} from an empty selection")
 
-        primary = max(selection.members, key=lambda c: c.area_px)
-        gap = max(3.0, JOIN_GAP_FACTOR * max(primary.bbox_px[2], primary.bbox_px[3]))
-
-        glyph = [primary]
-        x0, y0 = primary.bbox_px[0], primary.bbox_px[1]
-        x1, y1 = x0 + primary.bbox_px[2], y0 + primary.bbox_px[3]
-
-        # Grow over pieces the drawing joined to this one and that sit within a stroke of it.
-        changed = True
-        while changed:
-            changed = False
-            for c in selection.members:
-                if c in glyph or c.raw_id != primary.raw_id:
-                    continue
-                cx, cy, cw, ch = c.bbox_px
-                if cx > x1 + gap or cx + cw < x0 - gap or cy > y1 + gap or cy + ch < y0 - gap:
-                    continue
-                glyph.append(c)
-                x0, y0 = min(x0, cx), min(y0, cy)
-                x1, y1 = max(x1, cx + cw), max(y1, cy + ch)
-                changed = True
-
-        context = [c for c in selection.members if c not in glyph]
-
-        mask = np.zeros((y1 - y0, x1 - x0), bool)
-        for c in glyph:
-            cx, cy, cw, ch = c.bbox_px
-            mask[cy - y0 : cy - y0 + ch, cx - x0 : cx - x0 + cw] |= c.mask
-
+        x0, y0, w, h = selection.bbox_px
+        parts = tuple(
+            (c.bbox_px[0] - x0, c.bbox_px[1] - y0, c.bbox_px[2], c.bbox_px[3])
+            for c in sorted(selection.members, key=lambda c: -c.area_px)
+        )
         return cls(
             class_id=class_id,
-            mask=mask,
+            mask=selection.mask,
             dpi=selection.dpi,
             source_page_index=page_index,
-            source_bbox_px=(x0, y0, x1 - x0, y1 - y0),
-            context_blobs=len(context),
-            context_ink_px=int(sum(c.area_px for c in context)),
+            source_bbox_px=selection.bbox_px,
+            parts=parts,
         )
+
+
+def _box_gap(a: BBox, b: BBox) -> float:
+    """Edge-to-edge distance between two boxes; 0 when they touch or overlap."""
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    dx = max(bx - (ax + aw), ax - (bx + bw), 0)
+    dy = max(by - (ay + ah), ay - (by + bh), 0)
+    return float((dx * dx + dy * dy) ** 0.5)
 
 
 @dataclass(frozen=True)

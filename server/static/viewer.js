@@ -61,13 +61,25 @@ const els = {
   hitPosition: document.getElementById("hit-position"),
   hitTally: document.getElementById("hit-tally"),
   reset: document.getElementById("reset"),
-  candidatesHint: document.getElementById("candidates-hint"),
   detail: document.getElementById("detail"),
   truthAdd: document.getElementById("truth-add"),
   truthSave: document.getElementById("truth-save"),
   truthClear: document.getElementById("truth-clear"),
   truthLegend: document.getElementById("truth-legend"),
-  gradeToggle: document.getElementById("grade-toggle"),
+  gradeEvaluate: document.getElementById("grade-evaluate"),
+  gradeWarn: document.getElementById("grade-warn"),
+  verdictTally: document.getElementById("verdict-tally"),
+  truthHelp: document.getElementById("truth-help"),
+  classAdd: document.getElementById("class-add"),
+  classNew: document.getElementById("class-new"),
+  classNameInput: document.getElementById("class-name"),
+  classCreate: document.getElementById("class-create"),
+  classCancel: document.getElementById("class-cancel"),
+  classListToggle: document.getElementById("class-list"),
+  classRoster: document.getElementById("class-roster"),
+  panelBusy: document.getElementById("panel-busy"),
+  panelBusyText: document.getElementById("panel-busy-text"),
+  truthHelpText: document.getElementById("truth-help-text"),
   gradeState: document.getElementById("grade-state"),
   gradeList: document.getElementById("grade-list"),
   truthState: document.getElementById("truth-state"),
@@ -129,11 +141,24 @@ const state = {
    * rectangles over the drawing, which buries the thing being annotated -- and they are the
    * one overlay that persists through Reset, so leaving them on made Reset look inert. */
   showTruth: false,
+  showTruthHelp: false,
+  /* The class being counted, if any. Its truth is the only truth drawn while a count is
+   * up: every box of another class reads as something the tool missed. */
+  truthFocus: null,
+  showClassRoster: false,
+  /* What is being waited on, by kind. A Map rather than a flag because two waits can
+   * overlap -- dragging a box while the sheet is still being read is the normal case
+   * on a freshly opened page, not an edge one. */
+  busy: new Map(),
   /* The last graded run of this page, as the server read it off disk. Never computed here:
    * grading is a full detection pass, and a second place where runs happen is a second set
    * of numbers to reconcile. */
   grade: null,
   showGrade: false,
+  // The class the last missed instance was recorded as. A count is the better signal and
+  // wins, but it only exists while one has been run in this session -- reopen a page to
+  // carry on annotating and there is nothing to infer from except what you have been doing.
+  lastMissedClass: null,
 
   /* Recording a miss is a three-step gesture -- arm, drag, confirm -- because the box has to
    * be taken exactly as drawn. `missedMode` is armed and waiting; `pendingMissed` is a box
@@ -145,6 +170,14 @@ const state = {
    * enclosed no symbol-sized ink. Kept selectable -- refusing the gesture outright is what
    * made a missed symbol impossible to point at -- but there is no template in it to count. */
   selectionIsRaw: false,
+  /* The pieces the drag enclosed, and which of them are not the symbol.
+   *
+   * A symbol is not always one connected thing -- a supply diffuser is four corner brackets
+   * around an X, a demolition door is a dashed arc of nine pieces -- so the tool keeps
+   * everything the box held. Nothing measurable separates those from a label the box also
+   * caught, so the pieces are drawn and a person clicks the ones that do not belong. */
+  selectionParts: [],
+  excludedParts: new Set(),
 };
 
 /* Every page endpoint is scoped to a document. The bundled drawing is the default so the
@@ -245,6 +278,7 @@ async function load(page) {
   const viewer = state.viewer;
   viewer.addHandler("open", () => {
     els.loading.hidden = true;
+    warmSheet(page);
     viewer.viewport.goHome(true);
     applyMouseNav();
     redraw();
@@ -255,6 +289,33 @@ async function load(page) {
   viewer.addHandler("open-failed", (e) =>
     showLoading(`Tile source failed: ${e.message || "unknown error"}`, 0)
   );
+}
+
+/* Read the sheet before anybody asks a question about it.
+ *
+ * A first drag used to cost ~23 s: three candidate passes over a 7200x10800 raster plus the
+ * reference template for every registered class, none of which depends on WHERE the box was
+ * drawn. Every later drag on the same sheet costs ~0.3 s, because it is all cached. So the
+ * work is started the moment the sheet is on screen -- while a person is still finding the
+ * symbol -- rather than after they have finished dragging a box and are waiting on it.
+ *
+ * Fire and forget. If it fails, the drag path does the work itself exactly as it used to;
+ * this is a head start, not a dependency, and a broken warm must not stop a person counting. */
+async function warmSheet(page) {
+  const forPage = page;
+  try {
+    let info = await (await fetch(api(`/api/pages/${page}/warm`), { method: "POST" })).json();
+    while (info.state === "reading") {
+      if (state.page !== forPage) return;   // moved on; the pass finishes on its own
+      setBusy("sheet", `Reading the sheet… ${info.message || ""}`.trim());
+      await sleep(500);
+      info = await (await fetch(api(`/api/pages/${page}/warm`))).json();
+    }
+  } catch (err) {
+    // Nothing to report: the selection path still works, it is just cold.
+  } finally {
+    if (state.page === forPage) setBusy("sheet", null);
+  }
 }
 
 /* --------------------------------------------------------------------------- projection */
@@ -340,19 +401,22 @@ function redraw() {
       const verdict = state.verdicts[d.id];
       const pad = lead ? 4 : 2;
 
-      /* A human verdict is drawn on top of the band colour rather than replacing it: the
-       * detector's opinion and the reviewer's are different facts and both stay legible. */
+      /* Once a person has judged a box it takes their colour: green accepted, red rejected.
+       * The band colour is what the DETECTOR thought, and it stops being the interesting
+       * fact the moment somebody has looked -- an accepted 0.93 and an accepted 1.00 are the
+       * same thing to a count. Until then the box keeps its band colour, so "not yet looked
+       * at" stays visible at a glance. */
       ctx.save();
       if (verdict === "dropped") {
-        ctx.globalAlpha = 0.45;
+        ctx.globalAlpha = 0.55;
         ctx.setLineDash([5, 3]);
       }
-      ctx.strokeStyle = d.colour;
+      ctx.strokeStyle = VERDICT_COLOUR[verdict] || d.colour;
       ctx.lineWidth = lead ? 3 : 2;
       ctx.strokeRect(x - pad, y - pad, w + 2 * pad, h + 2 * pad);
 
       if (verdict === "kept") {
-        ctx.fillStyle = d.colour;
+        ctx.fillStyle = VERDICT_COLOUR.kept;
         ctx.fillRect(x - pad, y - pad - 4, 8, 4);
       } else if (verdict === "dropped") {
         ctx.beginPath();
@@ -376,9 +440,10 @@ function redraw() {
   /* Recorded ground truth, one Okabe-Ito colour per class and never a band colour, so it can
    * never be mistaken for a detection. This is what is really on the drawing; the blue and
    * amber boxes are only what the tool thinks. */
-  if (state.showTruth && state.truth && state.truth.length) {
+  const shownTruth = state.showTruth ? visibleTruth() : [];
+  if (shownTruth.length) {
     ctx.save();
-    for (const t of state.truth) {
+    for (const t of shownTruth) {
       const [bx, by, bw, bh] = t.bbox_image_px;
       const x = bx * p.scale + p.ox;
       const y = by * p.scale + p.oy;
@@ -419,6 +484,9 @@ function redraw() {
     ctx.save();
     for (const [, row] of Object.entries(state.grade.classes || {})) {
       for (const box of row.boxes) {
+        // False positives are off until asked for, on the sheet as well as in the list.
+        // They are a claim about ink rather than an outcome for a recorded instance, and
+        // showing them beside the misses makes a sheet look worse than it scored.
         const [bx, by, bw, bh] = box.bbox_image_px;
         const x = bx * p.scale + p.ox;
         const y = by * p.scale + p.oy;
@@ -453,13 +521,41 @@ function redraw() {
     ctx.setLineDash([6, 4]);
     ctx.strokeRect(bx * p.scale + p.ox, by * p.scale + p.oy, bw * p.scale, bh * p.scale);
     ctx.setLineDash([]);
+
+    /* What the tool thinks the symbol is made of, before it counts anything. Drawn only when
+     * there is more than one piece: for a single blob it would be a second box on top of the
+     * selection saying nothing. Click one to drop it -- an excluded piece keeps its outline
+     * so it is clear the ink is still there and simply is not part of the symbol. */
+    if (state.selectionParts.length > 1) {
+      ctx.save();
+      state.selectionParts.forEach((part, i) => {
+        const [px, py, pw, ph] = part.bbox_image_px;
+        const x = px * p.scale + p.ox;
+        const y = py * p.scale + p.oy;
+        const w = Math.max(pw * p.scale, 3);
+        const h = Math.max(ph * p.scale, 3);
+        const out = state.excludedParts.has(i);
+        ctx.strokeStyle = out ? "#999999" : "#009E73";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash(out ? [3, 3] : []);
+        ctx.strokeRect(x, y, w, h);
+        if (out) {
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x + w, y + h);
+          ctx.moveTo(x + w, y);
+          ctx.lineTo(x, y + h);
+          ctx.stroke();
+        }
+      });
+      ctx.restore();
+    }
   }
 }
 
 async function setCandidates(on) {
   state.showCandidates = on;
   els.candidatesToggle.setAttribute("aria-pressed", String(on));
-  els.candidatesHint.hidden = !on;
   if (on && !state.candidates) {
     els.candidatesToggle.textContent = "Loading…";
     try {
@@ -599,9 +695,59 @@ function gripAt(p, sx, sy) {
 
 /* Which recorded instance is under the pointer. Smallest first, so a box inside another is
  * still reachable. Picking is done against the STORED geometry, not the padded drawn one. */
+/* Which piece of the selection is under the pointer, if any. Smallest first, so a small
+ * piece sitting inside a larger one's box can still be clicked. */
+function selectionPartAt(p, sx, sy) {
+  if (state.selectionParts.length < 2) return -1;
+  const hits = [];
+  state.selectionParts.forEach((part, i) => {
+    const [px, py, pw, ph] = part.bbox_image_px;
+    const x = px * p.scale + p.ox;
+    const y = py * p.scale + p.oy;
+    const w = Math.max(pw * p.scale, 3);
+    const h = Math.max(ph * p.scale, 3);
+    if (sx >= x - 2 && sx <= x + w + 2 && sy >= y - 2 && sy <= y + h + 2) hits.push([w * h, i]);
+  });
+  if (!hits.length) return -1;
+  hits.sort((a, b) => a[0] - b[0]);
+  return hits[0][1];
+}
+
+/* The two lists the count request carries: pieces switched off that the server would have
+ * kept, and pieces switched on that it would have dropped. */
+function partChoices() {
+  const excluded = [];
+  const included = [];
+  state.selectionParts.forEach((part, i) => {
+    const off = state.excludedParts.has(i);
+    const onByDefault = part.active !== false;
+    if (onByDefault && off) excluded.push(part.bbox_image_px);
+    if (!onByDefault && !off) included.push(part.bbox_image_px);
+  });
+  return { excluded, included };
+}
+
+
+function toggleSelectionPart(index) {
+  const part = state.selectionParts[index];
+  if (!part) return;
+  if (state.excludedParts.has(index)) state.excludedParts.delete(index);
+  else state.excludedParts.add(index);
+  const kept = state.selectionParts.length - state.excludedParts.size;
+  const aside = state.selectionParts.filter((q) => q.active === false).length;
+  note(
+    `${kept} of ${state.selectionParts.length} pieces are the symbol` +
+    (aside ? ` (${aside} read as a label, off by default)` : "") +
+    `. Click a piece to include or exclude it, then count.`
+  );
+  syncCountButton();
+  redraw();
+}
+
 function truthAt(p, sx, sy) {
   const here = screenToImage(p, sx, sy);
-  const hits = state.truth.filter((t) => {
+  // Only what is drawn can be clicked; a hidden box would edit invisibly.
+  const hits = visibleTruth().filter((t) => {
     const [x, y, w, h] = t.bbox_image_px;
     return here.x >= x && here.x <= x + w && here.y >= y && here.y <= y + h;
   });
@@ -852,7 +998,18 @@ els.stage.addEventListener("pointerup", async (event) => {
 
   const w = Math.abs(drag.x1 - drag.x0);
   const h = Math.abs(drag.y1 - drag.y0);
-  if (w < 4 || h < 4) return;   // a click, not a drag
+  if (w < 4 || h < 4) {
+    // A click rather than a drag. If it landed on one of the pieces the selection is made of,
+    // that is the gesture for "this piece is not part of the symbol" -- the only way the tool
+    // can tell a symbol's own parts from a label the box also caught, since no measurement
+    // does it. Otherwise a stray click changes nothing, as before.
+    const clicked = projection();
+    if (clicked) {
+      const part = selectionPartAt(clicked, drag.x1, drag.y1);
+      if (part >= 0) toggleSelectionPart(part);
+    }
+    return;
+  }
 
   const p = projection();
   if (!p) return;
@@ -884,6 +1041,8 @@ function drawRubber() {
 function clearPanel() {
   state.selectedBox = null;
   state.selectionIsRaw = false;
+  state.selectionParts = [];
+  state.excludedParts = new Set();
   syncCountButton();
   clearResults();
   els.preview.hidden = true;
@@ -897,7 +1056,23 @@ function note(text) {
   els.panelNote.hidden = false;
 }
 
+/* One line, and the most specific wait wins.
+ *
+ * A drag that lands while the sheet is still being read waits for both, but what the person
+ * is waiting on is the answer to the box they just drew -- saying "reading the sheet" under
+ * it would describe a different wait and read as though the drag had been dropped. */
+const BUSY_ORDER = ["selection", "count", "sheet"];
+
+function setBusy(kind, message) {
+  if (message) state.busy.set(kind, message);
+  else state.busy.delete(kind);
+  const shown = BUSY_ORDER.map((k) => state.busy.get(k)).find(Boolean);
+  els.panelBusyText.textContent = shown || "";
+  els.panelBusy.hidden = !shown;
+}
+
 async function submitSelection(bboxImagePx) {
+  setBusy("selection", "Reading your selection…");
   try {
     const response = await fetch(api(`/api/pages/${state.page}/select`), {
       method: "POST",
@@ -941,6 +1116,13 @@ async function submitSelection(bboxImagePx) {
 
     state.selectedBox = result.bbox_image_px;
     state.selectionIsRaw = false;
+    state.selectionParts = result.parts || [];
+    // A piece the rule set aside -- a line of characters it read as a label -- arrives
+    // switched off. It is drawn and clickable like any other, so the rule's verdict is
+    // visible and can be overruled rather than being an invisible deletion.
+    state.excludedParts = new Set(
+      state.selectionParts.flatMap((part, i) => (part.active === false ? [i] : []))
+    );
     syncCountButton();
     els.panelHint.hidden = true;
     els.panelNote.hidden = true;
@@ -957,13 +1139,15 @@ async function submitSelection(bboxImagePx) {
     redraw();
   } catch (err) {
     note(`Selection failed: ${err.message}`);
+  } finally {
+    setBusy("selection", null);
   }
 }
 
 /* ------------------------------------------------------------------------------ counting */
 
 const BAND_LABEL = {
-  counted: "Counted",
+  counted: "Detected",
   review: "Needs review",
   rejected: "Rejected",
 };
@@ -973,11 +1157,28 @@ const BAND_COLOUR = {
   rejected: "#999999",
 };
 
+/* Rejected is not shown in the tally. It is the detector's own third band -- ink that scored
+ * below the class's review floor -- and `/count` does not return it unless `keep_rejected` is
+ * asked for, so the row was a permanent zero that looked like a broken counter. It is nothing
+ * to do with a reviewer pressing R; that is a verdict, and verdicts are counted separately
+ * below. The band still exists in `takeoff.banding` and still explains why a symbol is
+ * absent -- `diagnose` reports it -- it simply has no place in a list of results. */
+const BANDS_SHOWN = ["counted", "review"];
+
+/* A verdict is the reviewer's, not the detector's. Green and red rather than the band
+ * colours, because "I have judged this" is a different fact from "it scored 0.93". */
+const VERDICT_COLOUR = { kept: "#009E73", dropped: "#D55E00" };
+
 function clearResults() {
   state.detections = null;
+  if (state.grade && state.grade.live) {
+    state.grade = null;
+    state.showGrade = false;
+  }
   state.highlighted = null;
   state.cursor = -1;
   state.verdicts = {};
+  setWarning(null);
   els.results.hidden = true;
   els.detectionsToggle.hidden = true;
   els.fitSheet.hidden = true;
@@ -985,14 +1186,92 @@ function clearResults() {
   els.hits.replaceChildren();
   els.detail.hidden = true;
   cropCache.clear();
+  // Nothing is being counted now, so every class is shown again and Evaluate goes back to
+  // saying there is nothing to evaluate.
+  state.truthFocus = null;
+  syncVerdicts();
+  syncGrade();
+  syncTruthLegend();
+  redraw();
 }
 
 /* The registry is still read, but only so the panel can show what a selection was
  * recognised as. Nothing here chooses what gets counted -- the drag does. */
 async function loadClasses() {
-  const data = await (await fetch("/api/classes")).json();
+  const data = await (await fetch(api("/api/classes"))).json();
   state.classes = Object.fromEntries(data.classes.map((c) => [c.id, c]));
   syncCountButton();
+}
+
+/* Naming a selection.
+ *
+ * The built-in vocabulary is three symbols, which is a fair bet against no real drawing set.
+ * An unknown symbol was already countable -- it came back "unnamed" -- but ground truth and
+ * grading both key on a class id, so there was no way to record what it found or to measure
+ * it. A name is what turns a count into something that can be checked.
+ *
+ * It is a name for THIS SELECTION, not a bare label: the drag becomes the class's anchor,
+ * which is what lets it be recognised on other sheets and built into a template bank by the
+ * harness, exactly like a built-in.
+ */
+function openNewClass() {
+  if (!state.selectedBox) {
+    note("Select a symbol first — a new class is a name for what you have selected.");
+    return;
+  }
+  els.classNew.hidden = false;
+  els.classNameInput.value = "";
+  els.classNameInput.focus();
+}
+
+function closeNewClass() {
+  els.classNew.hidden = true;
+  els.classNameInput.value = "";
+}
+
+async function createClass() {
+  const name = els.classNameInput.value.trim();
+  if (!name) {
+    note("Give the symbol a name.");
+    els.classNameInput.focus();
+    return;
+  }
+  if (!state.selectedBox) {
+    note("The selection has gone — drag a box around the symbol again.");
+    closeNewClass();
+    return;
+  }
+  els.classCreate.disabled = true;
+  try {
+    const response = await fetch(api("/api/classes"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        page: state.page,
+        bbox_image_px: state.selectedBox,
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      note(body.detail || "Could not add that class.");
+      return;
+    }
+    await loadClasses();
+    // Both class dropdowns rebuild from `state.classes` when they are shown, so the only
+    // thing to arrange is that the class just named is the one they offer first -- somebody
+    // who has named a symbol is about to annotate it.
+    state.lastMissedClass = body.id;
+    closeNewClass();
+    note(
+      `“${body.name}” is registered, anchored on the symbol you selected. It can now be ` +
+      "counted, annotated and graded like any other class."
+    );
+    syncTruthLegend();
+    syncClassRoster();
+  } finally {
+    els.classCreate.disabled = false;
+  }
 }
 
 /* One gesture for every symbol: drag a box, press Count these. How a symbol gets counted is
@@ -1171,6 +1450,7 @@ function syncReviewBar() {
     ? `${state.cursor < 0 ? "-" : state.cursor + 1} / ${list.length}`
     : "no matches";
   els.hitTally.textContent = list.length && seen ? `${kept} kept, ${dropped} dropped` : "";
+  syncVerdicts();
 
   const current = state.cursor < 0 ? null : list[state.cursor];
   const verdict = current ? state.verdicts[current.id] : undefined;
@@ -1227,9 +1507,19 @@ function setDetectionsVisible(on) {
 
 function renderResults(result) {
   state.detections = result.detections;
+  // A live evaluation describes the count it was run on. This is a different count, so the
+  // old verdict is stale and must not stay on screen looking current. A stored sheet run is
+  // left alone: it is a statement about the sheet, not about this selection.
+  if (state.grade && state.grade.live) {
+    state.grade = null;
+    state.showGrade = false;
+  }
   state.highlighted = null;
   state.cursor = -1;
   state.verdicts = {};
+  state.truthFocus = lastCountedClass();
+  syncGrade();
+  syncTruthLegend();
   // Saved instances carry no link to a detection. Adopt them now, so a box corrected in an
   // earlier session is recognised as already recorded rather than accepted a second time.
   relinkTruthToDetections();
@@ -1297,19 +1587,21 @@ function renderResults(result) {
  * class and a template class differ only in the sentence above them. */
 function finishResults(result) {
   els.bands.replaceChildren(
-    ...Object.entries(result.counts.by_band).map(([status, n]) => {
-      const li = document.createElement("li");
-      const swatch = document.createElement("span");
-      swatch.className = "swatch";
-      swatch.style.background = BAND_COLOUR[status] || "#999";
-      const label = document.createElement("span");
-      label.textContent = BAND_LABEL[status] || status;
-      const value = document.createElement("span");
-      value.className = "n";
-      value.textContent = n;
-      li.append(swatch, label, value);
-      return li;
-    })
+    ...Object.entries(result.counts.by_band)
+      .filter(([status]) => BANDS_SHOWN.includes(status))
+      .map(([status, n]) => {
+        const li = document.createElement("li");
+        const swatch = document.createElement("span");
+        swatch.className = "swatch";
+        swatch.style.background = BAND_COLOUR[status] || "#999";
+        const label = document.createElement("span");
+        label.textContent = BAND_LABEL[status] || status;
+        const value = document.createElement("span");
+        value.className = "n";
+        value.textContent = n;
+        li.append(swatch, label, value);
+        return li;
+      })
   );
 
   els.hits.replaceChildren(
@@ -1346,13 +1638,27 @@ async function countSelection() {
   if (!state.selectedBox) return;
   els.countButton.disabled = true;
   els.countButton.textContent = "Counting…";
+  // A sheet-wide pass is the longest wait here -- minutes on E4 -- and the button going grey
+  // is not enough to say the tool is still working rather than stuck.
+  setBusy("count", "Counting every instance on this sheet…");
+  // Only DEVIATIONS from what the server already decided travel. It drops captions by
+  // default, so re-including one is an explicit `include` and dropping a piece it kept is an
+  // explicit `exclude`. Sending the whole state instead would make the default unreachable
+  // for any caller that sends nothing.
+  const choices = partChoices();
   try {
     const response = await fetch(api(`/api/pages/${state.page}/count`), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // No class is sent. What is being counted is whatever was selected; the server
-      // recognises it if it is registered and counts it unnamed if it is not.
-      body: JSON.stringify({ bbox_image_px: state.selectedBox }),
+      // recognises it if it is registered and counts it unnamed if it is not. The excluded
+      // pieces travel as BOXES rather than positions, because naming the class can re-resolve
+      // the drag on that class's own ink and the pieces are different objects afterwards.
+      body: JSON.stringify({
+        bbox_image_px: state.selectedBox,
+        exclude_parts_image_px: choices.excluded,
+        include_parts_image_px: choices.included,
+      }),
     });
     if (!response.ok) {
       clearResults();
@@ -1376,6 +1682,7 @@ async function countSelection() {
   } catch (err) {
     note(`Count failed: ${err.message}`);
   } finally {
+    setBusy("count", null);
     els.countButton.textContent = "Count these";
     syncCountButton();
   }
@@ -1384,21 +1691,32 @@ async function countSelection() {
 
 /* --------------------------------------------------------------------------- grading */
 
-/* Four things a run can say about a box, and each has to be tellable from the others at a
+/* Five things a run can say about a box, and each has to be tellable from the others at a
  * glance while zoomed out. Green found it; vermillion is wrong either way round -- a claim
  * on ink that is not the symbol, or a symbol the tool never claimed -- and the two are
  * separated by fill rather than hue, because they are the same failure to a reader scanning
- * a sheet. Amber is the review band, the same amber banding.py already uses for it. */
+ * a sheet. Amber is the review band, the same amber banding.py already uses for it.
+ *
+ * The two ambers differ because the work they imply differs: a recovery is a real instance
+ * waiting for a yes, drawn solid because there is something there; review-on-nothing is
+ * noise to clear, drawn dotted. Reporting them as one number is what made occlusion work
+ * unmeasurable -- see the harness docstring. */
 const GRADE_STYLES = {
   matched: { colour: "#009E73", width: 1.5, dash: [], what: "found" },
   spurious: { colour: "#D55E00", width: 2.5, dash: [], what: "false positive" },
   missed: { colour: "#D55E00", width: 2.5, dash: [7, 4], what: "missed" },
-  in_review: { colour: "#E69F00", width: 2, dash: [2, 4], what: "in review" },
+  recovered: { colour: "#E69F00", width: 2.5, dash: [], what: "found, in review" },
+  review_spurious: { colour: "#E69F00", width: 2, dash: [2, 4], what: "in review" },
 };
 
-// Matched boxes are drawn but not listed. There are 41 of them on T5 and they are the case
-// nobody needs to look at; the list is for what went wrong.
-const GRADE_LISTED = ["spurious", "missed", "in_review"];
+// Every graded box is DRAWN. Only the misses are listed row by row: a match that landed is
+// already in the count above and there are 41 of them on T5, and a false positive is a box
+// the reviewer has just rejected by hand and does not need read back to them. The list is
+// for the one thing a person can act on -- something recorded that nothing found.
+//
+// There used to be a Show false positives toggle here. It filtered a list, and the number it
+// revealed now has its own row in the summary, so the button was a control for something
+// already on screen.
 
 async function loadGrade() {
   state.grade = null;
@@ -1412,14 +1730,152 @@ async function loadGrade() {
   redraw();
 }
 
-function setShowGrade(on) {
-  if (on && !(state.grade && state.grade.graded)) {
-    note("This page has not been graded yet. Run `python -m eval.suites --page " +
-         `${state.page}\` first.`);
+/* Score what is on screen against this page's annotations.
+ *
+ * The counting already happened, so this grades the results the viewer is holding rather
+ * than counting again -- instant, and it answers the question a person actually has after
+ * pressing Count: how many of the ones I recorded did it find? */
+async function evaluateCount() {
+  if (!(state.detections && state.detections.length)) {
+    note("Count a symbol first, then evaluate what it found.");
     return;
   }
-  state.showGrade = on;
-  els.gradeToggle.setAttribute("aria-pressed", String(on));
+  const left = unreviewedCount();
+  if (left > 0) {
+    warnUnreviewed(left);
+    return;
+  }
+  setWarning(null);
+  els.gradeEvaluate.disabled = true;
+  els.gradeEvaluate.textContent = "Evaluating…";
+  try {
+    const response = await fetch(api(`/api/pages/${state.page}/evaluate`), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        detections: (state.detections || []).map((d) => ({
+          class_id: d.class_id,
+          bbox_px: d.bbox_px,
+          status: d.status,
+          match: d.match,
+          reason: d.reason,
+          variant: d.variant || "",
+          // The verdict is the answer being scored. Which band it came from stops mattering
+          // the moment somebody has looked at it.
+          verdict: state.verdicts[d.id] || null,
+        })),
+        // The annotations as they stand HERE, not as they stand on disk. Accepting a match
+        // records the instance immediately and saving is a separate gesture, so scoring
+        // against the file would report everything just confirmed as missing.
+        truth: state.truth.map((t) => ({
+          class_id: t.class_id,
+          bbox_image_px: t.bbox_image_px,
+          label: t.label || null,
+          occluded: Boolean(t.occluded),
+        })),
+      }),
+    });
+    state.grade = response.ok ? await response.json() : null;
+  } catch {
+    state.grade = null;
+  }
+  els.gradeEvaluate.disabled = false;
+  els.gradeEvaluate.textContent = "Evaluate";
+  if (!(state.grade && state.grade.graded)) {
+    syncGrade();
+    note((state.grade && state.grade.how) || "Could not evaluate this page.");
+    return;
+  }
+  state.showGrade = true;
+  syncGrade();
+  redraw();
+}
+
+/* The reminder, and it goes beside the button rather than into the panel note.
+ *
+ * It used to call `note()`, which writes to the top of the Selection section -- and on a page
+ * that has results that is a thousand pixels above the Evaluate button, off screen. Pressing
+ * Evaluate with a half-finished review therefore looked like pressing a dead button: the tool
+ * had an answer and put it where nobody was looking. */
+function setWarning(text) {
+  els.gradeWarn.textContent = text || "";
+  els.gradeWarn.hidden = !text;
+}
+
+function warnUnreviewed(left) {
+  setWarning(
+    `${left} match${left === 1 ? " has" : "es have"} not been reviewed yet. ` +
+    "Accept or reject every one (A keeps, R rejects, N steps) before evaluating — " +
+    "accepting is what records an instance as real, so a half-finished review would score " +
+    "the tool against an unfinished answer."
+  );
+}
+
+/* What the reviewer has decided so far, and whether that is enough to evaluate.
+ *
+ * Evaluating a half-reviewed count would score the detector against a person who has not
+ * finished disagreeing with it, and the number would move every time they pressed A or R
+ * without anything about the detector having changed. So the button waits until every match
+ * has a verdict, and says how many are left.
+ */
+function syncVerdicts() {
+  const list = state.detections || [];
+  const decided = Object.keys(state.verdicts).length;
+  const kept = Object.values(state.verdicts).filter((v) => v === "kept").length;
+
+  els.verdictTally.replaceChildren();
+  if (list.length) {
+    for (const [label, n, colour] of [
+      ["Accepted", kept, VERDICT_COLOUR.kept],
+      ["Rejected", decided - kept, VERDICT_COLOUR.dropped],
+    ]) {
+      const li = document.createElement("li");
+      const swatch = document.createElement("span");
+      swatch.className = "swatch";
+      swatch.style.background = colour;
+      const name = document.createElement("span");
+      name.textContent = label;
+      const value = document.createElement("span");
+      value.className = "n";
+      value.textContent = n;
+      li.append(swatch, name, value);
+      els.verdictTally.appendChild(li);
+    }
+  }
+
+  // Pressable even when the review is unfinished. A disabled button gives no reason, so a
+  // person presses it, nothing happens, and the tool has told them nothing; the reminder is
+  // the point.
+  const left = list.length - decided;
+  // Finishing the review answers the reminder, so it goes. Leaving it up would have somebody
+  // reading a complaint about work they have just done.
+  if (left === 0) setWarning(null);
+  else if (!els.gradeWarn.hidden) warnUnreviewed(left);
+  els.gradeEvaluate.disabled = false;
+  els.gradeEvaluate.title = !list.length
+    ? "Count a symbol first"
+    : left > 0
+      ? `Accept or reject the remaining ${left} match${left === 1 ? "" : "es"} first`
+      : "Score this count against the page's ground truth";
+}
+
+/* How many matches still have no verdict. Evaluating before they all do would score the
+ * detector against a person who has not finished disagreeing with it. */
+function unreviewedCount() {
+  const list = state.detections || [];
+  return list.length - Object.keys(state.verdicts).length;
+}
+
+/* There is no show/hide control any more. An evaluation is something you asked for by
+ * pressing the button, so it is shown; the way to be rid of it is Reset, which is also the
+ * way to be rid of the count it describes. */
+function showStoredGrade() {
+  if (!(state.grade && state.grade.graded)) {
+    note("Nothing to show yet — count a symbol and press Evaluate, or run " +
+         `\`python -m eval.suites --page ${state.page}\`.`);
+    return;
+  }
+  state.showGrade = true;
   syncGrade();
   redraw();
 }
@@ -1442,39 +1898,53 @@ function syncGrade() {
   els.gradeList.replaceChildren();
   const run = state.grade;
   if (!run || !run.graded) {
-    els.gradeToggle.disabled = true;
-    els.gradeState.textContent = "Not graded yet — " + ((run && run.how) || "run eval.suites");
+    els.gradeState.textContent =
+      (run && run.how) || "Count a symbol, then press Evaluate.";
     return;
   }
-  els.gradeToggle.disabled = false;
-  els.gradeState.textContent = `Graded ${gradeAge(run.run_at)} against ${run.source}.`;
+  els.gradeState.textContent =
+    (run.live ? "Evaluated " : "Graded ") + gradeAge(run.run_at) +
+    ` against ${run.source}` +
+    (run.live ? " — the count on screen." : " — a full sheet run.");
   if (!state.showGrade) return;
 
   for (const [classId, row] of Object.entries(run.classes || {})) {
     const head = document.createElement("li");
     head.className = "head";
-    const name = (state.classes[classId] || {}).name || classId;
-    head.textContent =
-      `${name}: ${row.true_positives} found, ${row.false_positives} wrong, ` +
-      `${row.false_negatives} missed, ${row.review_volume} in review`;
+    head.textContent = (state.classes[classId] || {}).name || classId;
     els.gradeList.appendChild(head);
 
-    for (const box of row.boxes) {
-      if (!GRADE_LISTED.includes(box.kind)) continue;
-      const style = GRADE_STYLES[box.kind];
+    for (const [label, value, why] of summaryRows(row, run)) {
+      const li = document.createElement("li");
+      li.className = "metric";
+      li.title = why || "";
+      const name = document.createElement("span");
+      name.className = "label";
+      name.textContent = label;
+      const n = document.createElement("span");
+      n.className = "value";
+      n.textContent = value;
+      li.append(name, n);
+      els.gradeList.appendChild(li);
+    }
+
+    // The missed instances, clickable. They are the only rows worth listing one by one: a
+    // match that landed is already accounted for in the count above and needs no attention,
+    // and a false positive is a box the reviewer has just rejected by hand.
+    for (const box of (row.boxes || []).filter((b) => b.kind === "missed")) {
       const li = document.createElement("li");
       li.className = "box";
-      li.style.color = style.colour;
+      li.style.color = GRADE_STYLES.missed.colour;
       const dot = document.createElement("span");
       dot.className = "dot";
       const what = document.createElement("span");
       what.className = "what";
-      what.textContent = style.what + (box.occluded ? ", occluded" : "");
+      what.textContent = "not found" + (box.occluded ? ", occluded" : "");
       const n = document.createElement("span");
       n.className = "n";
-      n.textContent = box.match !== undefined ? box.match.toFixed(3) : (box.label || "");
+      n.textContent = box.label || "";
       li.append(dot, what, n);
-      li.title = box.reason || box.label || "";
+      li.title = "Click to fly to it";
       li.addEventListener("click", () => flyTo(box.bbox_image_px));
       els.gradeList.appendChild(li);
     }
@@ -1485,6 +1955,57 @@ function syncGrade() {
     li.textContent = row;
     els.gradeList.appendChild(li);
   }
+}
+
+/* The six numbers, in the order somebody reads them: what was found, what was not, how the
+ * hard ones went, what was claimed wrongly, and then the two rates.
+ *
+ * `detected` counts what the REVIEWER ACCEPTED, whichever band it came from. Once a person
+ * has confirmed an instance held for review, calling it a half-find would be describing the
+ * tool's uncertainty rather than the answer -- and the answer is what an evaluation is for.
+ *
+ * Occlusion is found-of-recorded and carries no false-positive count on purpose: a false
+ * positive sits on no instance, so there is no instance to say whether it was occluded.
+ */
+function summaryRows(row, run) {
+  const pct = (v) => `${(v * 100).toFixed(1)}%`;
+  const accepted = run.live ? "accepted" : "counted";
+  const rows = [
+    ["detected", `${row.detected} / ${row.present}`,
+     `${row.detected} ${accepted} match${row.detected === 1 ? "" : "es"} landed on a ` +
+     `recorded instance, out of ${row.present} recorded on this page.`],
+    ["missed", String(row.missed),
+     `Recorded instances with no ${accepted} match on them.`],
+  ];
+  if (row.occluded_present) {
+    rows.push(["occluded detections",
+      `${row.occluded_detected} / ${row.occluded_present}`,
+      "The same question for instances something crosses — the hard ones, and the reason " +
+      "they are split out: on a whole-sheet average a handful of them barely moves the " +
+      "number. No false-positive count here, because a false positive sits on no instance."]);
+  }
+  rows.push(["false positives", String(row.false_positives),
+    run.live
+      ? "Matches you rejected, plus any you accepted that sit on no recorded instance."
+      : "Counted detections sitting on no recorded instance."]);
+  rows.push(["average precision", pct(row.average_precision),
+    "Area under the precision-recall curve, walked in the detector's own score order. NOT " +
+    "the same as precision: it asks whether the SCORES were ordered correctly, so a wrong " +
+    "match scoring above right ones costs AP even when every one of them was caught. 100% " +
+    "beside a row of false positives means they all scored below the real ones — which is " +
+    "the good case, and the one a threshold could act on."]);
+  rows.push(["recall", pct(row.recall),
+    `${row.detected} of ${row.present} recorded instances found.`]);
+
+  // A stored run has no verdicts, so its review band is unresolved and the count above is
+  // the counted band alone. Saying how many are waiting is the difference between "the tool
+  // lost these" and "the tool found these and wants confirmation".
+  if (!run.live && row.review_volume) {
+    rows.push(["in review, unconfirmed", String(row.review_volume),
+      "Nobody has been through this run, so its review band is unresolved. Count the sheet " +
+      "in the viewer and review it to turn these into an answer."]);
+  }
+  return rows;
 }
 
 /* ------------------------------------------------------------------- annotating truth */
@@ -1519,7 +2040,7 @@ function truthColour(classId) {
 /* What is recorded on this page, by class, in registry order. Drives the legend. */
 function truthTally() {
   const counts = new Map();
-  for (const t of state.truth) counts.set(t.class_id, (counts.get(t.class_id) || 0) + 1);
+  for (const t of visibleTruth()) counts.set(t.class_id, (counts.get(t.class_id) || 0) + 1);
   const ids = Object.keys(state.classes || {});
   const ordered = [...counts.keys()].sort((a, b) => {
     const ia = ids.indexOf(a), ib = ids.indexOf(b);
@@ -1533,12 +2054,28 @@ function truthTally() {
   }));
 }
 
+/* The keys and what they do, behind a question mark.
+ *
+ * Four paragraphs of instructions sat open above the annotations they describe, so the thing
+ * a person is actually working with was below the fold on a short window. They are worth
+ * keeping -- occlusion and the difference between Reset and Clear are not guessable -- but
+ * not worth the space once read. */
+function setTruthHelp(on) {
+  state.showTruthHelp = on;
+  els.truthHelpText.hidden = !on;
+  els.truthHelp.setAttribute("aria-pressed", String(on));
+}
+
 /* One row per registered class: how many are recorded, or a box to say there are none.
  *
  * It used to list only the classes with instances, which reads as a legend and hides the
  * question that matters while annotating -- have I looked for this yet? A blank space cannot
  * distinguish "no markers on this sheet" from "I never checked", and grading needs that
- * distinction to know whether a detection here is a false positive or nothing at all. */
+ * distinction to know whether a detection here is a false positive or nothing at all.
+ *
+ * While a class is being counted the legend narrows with the overlay. Listing the others
+ * would offer "none on this sheet" beside a class that has annotations and is merely hidden
+ * -- a tickbox asserting a falsehood. */
 function syncTruthLegend() {
   els.truthLegend.replaceChildren();
   if (!state.showTruth) {
@@ -1546,7 +2083,9 @@ function syncTruthLegend() {
     return;
   }
   const counts = new Map(truthTally().map((r) => [r.id, r]));
-  const ids = Object.keys(state.classes || {});
+  const ids = state.truthFocus
+    ? [state.truthFocus]
+    : Object.keys(state.classes || {});
   for (const id of [...counts.keys()].filter((k) => !ids.includes(k))) ids.push(id);
 
   for (const id of ids) {
@@ -1580,6 +2119,94 @@ function syncTruthLegend() {
     els.truthLegend.appendChild(li);
   }
   els.truthLegend.hidden = false;
+}
+
+/* The roster of classes this tool knows about, behind its own button. It is a different
+ * question from the legend -- not "what is on this sheet" but "what can I annotate" -- and
+ * it is where a class somebody added gets removed again. */
+function setClassRoster(on) {
+  state.showClassRoster = on;
+  els.classListToggle.setAttribute("aria-pressed", String(on));
+  syncClassRoster();
+}
+
+function syncClassRoster() {
+  els.classRoster.replaceChildren();
+  if (!state.showClassRoster) {
+    els.classRoster.hidden = true;
+    return;
+  }
+  const ids = Object.keys(state.classes || {});
+  if (!ids.length) {
+    const li = document.createElement("li");
+    li.className = "muted";
+    li.textContent = "No classes registered.";
+    els.classRoster.appendChild(li);
+    els.classRoster.hidden = false;
+    return;
+  }
+  for (const id of ids) {
+    const registered = state.classes[id] || {};
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.className = "class-name";
+    name.textContent = registered.name || id;
+    li.append(name);
+
+    // Only a class somebody added can be removed. A built-in ships with the tool and its
+    // anchor lives in classes.py, so a button offering to delete one would be lying.
+    if (registered.user_defined) {
+      const drop = document.createElement("button");
+      drop.className = "drop-class";
+      drop.textContent = "Remove";
+      drop.title = "Remove this class";
+      drop.addEventListener("click", () => removeClass(id));
+      li.append(drop);
+    } else {
+      const built = document.createElement("span");
+      built.className = "built-in";
+      built.textContent = "built in";
+      li.append(built);
+    }
+    els.classRoster.appendChild(li);
+  }
+  els.classRoster.hidden = false;
+}
+
+/* Removing a class a person added. Their annotations are NOT removed with it -- they are
+ * somebody's work, and deleting them quietly would be the worst reading of "remove the
+ * class". The confirmation says how many there are, because that is the fact that decides it. */
+async function removeClass(classId) {
+  const registered = state.classes[classId] || {};
+  const mine = state.truth.filter((t) => t.class_id === classId).length;
+  const kept = mine
+    ? `${mine} annotation${mine === 1 ? "" : "s"} on this page use it. They are kept and keep ` +
+      "this label, but the class stops being offered and stops being graded.\n\n"
+    : "";
+  const warning =
+    `Remove the class \u201C${registered.name || classId}\u201D?\n\n` +
+    kept +
+    "Re-adding the same name brings it back.";
+  if (!confirm(warning)) return;
+
+  const response = await fetch(api(`/api/classes/${encodeURIComponent(classId)}`), {
+    method: "DELETE",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    note(body.detail || "Could not remove that class.");
+    return;
+  }
+  await loadClasses();
+  if (state.truthFocus === classId) state.truthFocus = null;
+  state.reviewedClasses.delete(classId);
+  syncClassRoster();
+  syncTruthLegend();
+  redraw();
+  note(
+    `Removed \u201C${body.name || registered.name || classId}\u201D.` +
+      (mine ? ` ${mine} annotation${mine === 1 ? "" : "s"} kept.` : "")
+  );
 }
 
 /* Asserting a zero is an annotation like any other: it makes the page dirty and has to be
@@ -1849,30 +2476,58 @@ function commitMissed() {
     occluded,
   };
   state.truth.push(instance);
-  // Hand-drawn boxes are the ones most likely to need a nudge, so the new one is the box the
-  // handles are on -- correcting it is the next thing you would do.
-  state.activeTruth = instance.uid;
+  state.lastMissedClass = classId;
+
+  /* Stay armed. Misses come in runs -- a detector that missed one receptacle behind a
+   * furniture block missed the four beside it -- and pressing M between every drag is a
+   * keystroke per instance for no decision. Esc leaves.
+   *
+   * The new box is deliberately NOT selected while armed, unlike before. The inspector and
+   * the confirm step carry the same two controls, and showing the inspector for the last
+   * instance while the next drag is being armed is exactly how the wrong box gets edited. */
+  state.activeTruth = null;
   if (!state.showTruth) setShowTruth(true);
   syncTruthEdit();
   state.pendingMissed = null;
-  state.missedMode = false;
+  state.missedMode = true;
+  if (!state.selectMode) setSelectMode(true);
   syncMissedUi();
   markTruthDirty(true);
   note(
     `Recorded a missed ${classId}${occluded ? ", occluded" : ""}. ` +
-    `${state.truth.length} instance${state.truth.length === 1 ? "" : "s"} in total.`
+    `${state.truth.length} instance${state.truth.length === 1 ? "" : "s"} in total. ` +
+    `Still armed -- drag the next one, Esc to stop.`
   );
   redraw();
 }
 
 /* The class list is the registry plus whatever the page has already counted, so a miss can be
  * recorded for a class even when nothing of it was found on this sheet. */
+/* Which class a missed instance is most likely to be, best evidence first.
+ *
+ * The count wins: you ran it, you are reviewing its results, and what it did not propose is
+ * what M is for. Failing that, whatever you recorded last -- annotating is repetitive by
+ * nature. Failing that, the class this page is already full of, which is what makes reopening
+ * a half-finished sheet pick up where it left off instead of defaulting to whichever class
+ * sorts first. The alphabetical fallback is how a page of 90 receptacles kept offering
+ * `door_swing`. */
+function preferredMissedClass() {
+  const counted = lastCountedClass();
+  if (counted) return counted;
+  if (state.lastMissedClass) return state.lastMissedClass;
+  const tally = new Map();
+  for (const t of state.truth) tally.set(t.class_id, (tally.get(t.class_id) || 0) + 1);
+  let best = null;
+  for (const [id, n] of tally) if (!best || n > best[1]) best = [id, n];
+  return best ? best[0] : null;
+}
+
 function syncMissedClassOptions() {
   const registered = Object.values(state.classes || {});
   const ids = registered.length
     ? registered.map((c) => ({ id: c.id, name: c.name || c.id }))
     : [{ id: "unknown", name: "unknown" }];
-  const preferred = lastCountedClass();
+  const preferred = preferredMissedClass();
   els.missedClass.innerHTML = "";
   for (const c of ids) {
     const option = document.createElement("option");
@@ -1939,6 +2594,16 @@ function lastCountedClass() {
   return state.detections && state.detections.length ? state.detections[0].class_id : null;
 }
 
+/* The annotations worth showing right now.
+ *
+ * With nothing counted that is all of them -- the sheet's whole record. While a class is
+ * being counted it is only that class, because every box of another class reads as something
+ * the tool missed and the comparison being made is this class against its own truth. */
+function visibleTruth() {
+  if (!state.truthFocus) return state.truth;
+  return state.truth.filter((t) => t.class_id === state.truthFocus);
+}
+
 async function saveTruth() {
   els.truthSave.disabled = true;
   els.truthSave.textContent = "Saving…";
@@ -1993,6 +2658,14 @@ window.addEventListener("keydown", (e) => {
     else resetAll();
     return;
   }
+  // Confirm the box being held, without leaving the drawing for the panel. Staying armed
+  // saves the M between instances; this saves the mouse trip, and the two together are what
+  // make a run of misses drag, Enter, drag, Enter.
+  if (e.key === "Enter" && state.pendingMissed) {
+    e.preventDefault();
+    commitMissed();
+    return;
+  }
   if (e.key.toLowerCase() === "c") {
     e.preventDefault();
     setCandidates(!state.showCandidates);
@@ -2012,7 +2685,12 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key.toLowerCase() === "v") {
     e.preventDefault();
-    setShowGrade(!state.showGrade);
+    if (state.detections && state.detections.length && !(state.grade && state.grade.live)) {
+      if (els.gradeEvaluate.disabled) note(els.gradeEvaluate.title);
+      else evaluateCount();
+    } else {
+      showStoredGrade();
+    }
     return;
   }
   if (e.key.toLowerCase() === "e") {
@@ -2148,7 +2826,20 @@ async function main() {
   els.selectMode.addEventListener("click", () => setSelectMode(!state.selectMode));
   els.editMode.addEventListener("click", () => setEditMode(!state.editMode));
   els.truthToggle.addEventListener("click", () => setShowTruth(!state.showTruth));
-  els.gradeToggle.addEventListener("click", () => setShowGrade(!state.showGrade));
+  els.gradeEvaluate.addEventListener("click", evaluateCount);
+  els.truthHelp.addEventListener("click", () => setTruthHelp(!state.showTruthHelp));
+  els.classAdd.addEventListener("click", openNewClass);
+  els.classCreate.addEventListener("click", createClass);
+  els.classCancel.addEventListener("click", closeNewClass);
+  els.classListToggle.addEventListener("click", () => setClassRoster(!state.showClassRoster));
+  els.classNameInput.addEventListener("keydown", (e) => {
+    // Enter creates, Escape backs out -- the same two keys the missed-instance step uses.
+    // Enter creates, Escape backs out -- the same two keys the missed-instance step uses.
+    // The sheet shortcuts already ignore anything typed in a field (`typingInAField`), so
+    // there is nothing to stop here.
+    if (e.key === "Enter") { e.preventDefault(); createClass(); }
+    else if (e.key === "Escape") { e.preventDefault(); closeNewClass(); }
+  });
   els.truthClass.addEventListener("change", (e) => setActiveTruthClass(e.target.value));
   els.truthOccluded.addEventListener("change", (e) => setActiveTruthOccluded(e.target.checked));
   els.truthDelete.addEventListener("click", deleteActiveTruth);

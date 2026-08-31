@@ -1,0 +1,1630 @@
+{
+  "document": "0937f4764f7b",
+  "page": 26,
+  "dpi": 300,
+  "reviewed_classes": [
+    "receptacle_duplex"
+  ],
+  "instances": [
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3783,
+        2443,
+        36,
+        30
+      ],
+      "label": "G",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3781,
+        1815,
+        38,
+        26
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1150,
+        1579,
+        40,
+        29
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1149,
+        1682,
+        41,
+        30
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3368,
+        2443,
+        25,
+        38
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3440,
+        2442,
+        25,
+        38
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3428,
+        2499,
+        26,
+        38
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3479,
+        2639,
+        29,
+        42
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3782,
+        2411,
+        39,
+        28
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3784,
+        2363,
+        34,
+        25
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3782,
+        2069,
+        40,
+        30
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4088,
+        2145,
+        41,
+        28
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4145,
+        2145,
+        41,
+        28
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4581,
+        2067,
+        41,
+        30
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4580,
+        2259,
+        41,
+        29
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5642,
+        2495,
+        41,
+        30
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4109,
+        2968,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2918,
+        3462,
+        39,
+        29
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1153,
+        1043,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2533,
+        1043,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3445,
+        1043,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4338,
+        1043,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5231,
+        1043,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6527,
+        1052,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2469,
+        1069,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3380,
+        1069,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4273,
+        1069,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5166,
+        1069,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6006,
+        1069,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1603,
+        1074,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2469,
+        1394,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3380,
+        1394,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4273,
+        1394,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5166,
+        1394,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6006,
+        1394,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1354,
+        1453,
+        31,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1806,
+        1453,
+        31,
+        48
+      ],
+      "label": "75",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2284,
+        1453,
+        31,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3648,
+        1453,
+        31,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4089,
+        1453,
+        31,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4533,
+        1453,
+        31,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4988,
+        1453,
+        31,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2694,
+        1518,
+        31,
+        46
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4421,
+        1518,
+        31,
+        46
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6397,
+        1709,
+        26,
+        39
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3378,
+        2500,
+        25,
+        38
+      ],
+      "label": "G",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6457,
+        2695,
+        31,
+        46
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4980,
+        2828,
+        31,
+        47
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1717,
+        2893,
+        31,
+        45
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2186,
+        2893,
+        31,
+        45
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5033,
+        2967,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2370,
+        2995,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4969,
+        2995,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5891,
+        2995,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6556,
+        3111,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3309,
+        3243,
+        31,
+        46
+      ],
+      "label": "15",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4969,
+        3318,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5891,
+        3318,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3619,
+        3636,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6006,
+        1957,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1153,
+        1365,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2533,
+        1365,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5956,
+        3185,
+        34,
+        26
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5033,
+        3291,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6071,
+        1041,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3445,
+        1365,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4338,
+        1365,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5231,
+        1365,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1603,
+        1396,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2736,
+        1453,
+        32,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3214,
+        1453,
+        32,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5430,
+        1453,
+        32,
+        48
+      ],
+      "label": "AV",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5885,
+        1453,
+        32,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6527,
+        1483,
+        48,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1311,
+        1518,
+        32,
+        46
+      ],
+      "label": "3",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6482,
+        1700,
+        32,
+        48
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2682,
+        2828,
+        32,
+        47
+      ],
+      "label": "AV",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4155,
+        2828,
+        32,
+        47
+      ],
+      "label": "15",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2643,
+        2893,
+        32,
+        45
+      ],
+      "label": "AV",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4315,
+        2893,
+        32,
+        45
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4784,
+        2893,
+        32,
+        45
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5226,
+        2893,
+        32,
+        45
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5706,
+        2893,
+        32,
+        45
+      ],
+      "label": "AV",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2370,
+        3287,
+        47,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5956,
+        3291,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2920,
+        3350,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2920,
+        3650,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1508,
+        3291,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6318,
+        3379,
+        31,
+        48
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6069,
+        1981,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6069,
+        2433,
+        48,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2003,
+        1047,
+        48,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5956,
+        2967,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1538,
+        1047,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6457,
+        1765,
+        31,
+        46
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4572,
+        3314,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2934,
+        1047,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3827,
+        1047,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4720,
+        1047,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5613,
+        1047,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1973,
+        3314,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5494,
+        3314,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2435,
+        3314,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2068,
+        1073,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2998,
+        1073,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3891,
+        1073,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4784,
+        1073,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5677,
+        1073,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6071,
+        1457,
+        46,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4507,
+        3287,
+        48,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5430,
+        3287,
+        47,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1909,
+        3287,
+        47,
+        32
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6169,
+        1762,
+        34,
+        50
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6141,
+        2631,
+        31,
+        47
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6482,
+        2631,
+        32,
+        47
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1511,
+        2397,
+        45,
+        32
+      ],
+      "label": "RM",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3190,
+        3091,
+        46,
+        32
+      ],
+      "label": "FE",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4110,
+        3291,
+        46,
+        31
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2828,
+        2995,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4284,
+        2067,
+        41,
+        30
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3619,
+        3336,
+        38,
+        31
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3780,
+        1960,
+        42,
+        30
+      ],
+      "label": "48",
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3802,
+        2224,
+        26,
+        37
+      ],
+      "label": "G",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5172,
+        1518,
+        31,
+        46
+      ],
+      "label": "CORRIDOR",
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        5641,
+        1859,
+        42,
+        29
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        1524,
+        2163,
+        40,
+        29
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6310,
+        2638,
+        28,
+        40
+      ],
+      "label": "72",
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3780,
+        1901,
+        42,
+        31
+      ],
+      "label": "60",
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4043,
+        2633,
+        30,
+        40
+      ],
+      "label": null,
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        4237,
+        2632,
+        29,
+        42
+      ],
+      "label": "44",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3781,
+        2520,
+        39,
+        26
+      ],
+      "label": "G",
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        6320,
+        2694,
+        29,
+        41
+      ],
+      "label": "72",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        3451,
+        2447,
+        47,
+        31
+      ],
+      "label": "G/44",
+      "occluded": false,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2829,
+        3317,
+        44,
+        34
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    },
+    {
+      "class_id": "receptacle_duplex",
+      "bbox_px": [
+        2903,
+        2937,
+        47,
+        31
+      ],
+      "label": null,
+      "occluded": true,
+      "source": "reviewed"
+    }
+  ]
+}

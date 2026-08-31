@@ -10,7 +10,7 @@ every change and deciding by eye whether the count got better. That does not sca
 classes, is not reproducible, and gives no warning when a fix for one class quietly breaks
 another. Three changes last session each moved counts invisibly until someone looked.
 
-Every number here is against `gt/<document>/pageNNN.json`. A page nobody has annotated is
+Every number here is against `ground_truth/<document>/pageNNN.json`. A page nobody has annotated is
 reported as unannotated rather than scored, because an empty truth file and an unseen page
 are different claims.
 
@@ -32,24 +32,30 @@ from takeoff import classes, detect, doors, raster, regions, schema
 
 DEFAULT_SOURCE = Path("Skanksa.pdf")
 
-# Where a graded run lands. Keyed by document hash exactly like `gt/` and `cache/`, so a
+# Where a graded run lands. Keyed by document hash exactly like `ground_truth/` and `cache/`, so a
 # report, the annotations it was graded against, and the tiles it was detected on all sit
 # under the same id for the same drawing.
 REPORT_ROOT = Path("eval/reports")
 
 
 def _page_bits(source: Path, index: int, symbol: classes.SymbolClass, cache: dict):
-    """Raster and candidates for one page, on the segmentation THIS class uses.
+    """Raster, candidates and host blobs for one page, on the segmentation THIS class uses.
 
-    Cached per (page, repair gap) because grading a sheet now renders two pages -- the sheet
-    itself and the sheet each class is anchored on -- and the two classes registered today
-    share neither gap nor page.
+    Keyed by everything that changes the ink, not just the page: grading a sheet renders two
+    pages -- the sheet itself and the sheet each class is anchored on -- and a class may want
+    its own repair gap and its own ink threshold. Key on one and not the other and a class is
+    silently graded on another class's ink.
     """
-    key = (index, symbol.repair_gap_px)
+    key = (index, symbol.repair_gap_px, symbol.ink_threshold)
     if key not in cache:
         r = raster.render(source, index, dpi=raster.DETECTION_DPI)
-        found = cand.find_candidates(r, cand.ink_layers(r, repair_gap_px=symbol.repair_gap_px))
-        cache[key] = (r, found)
+        layers = cand.ink_layers(
+            r,
+            ink_threshold=cand.INK_THRESHOLD if symbol.ink_threshold is None
+            else symbol.ink_threshold,
+            repair_gap_px=symbol.repair_gap_px,
+        )
+        cache[key] = (r, cand.find_candidates(r, layers), cand.host_blobs(r, layers))
     return cache[key]
 
 
@@ -68,7 +74,7 @@ def _entry_for(symbol: classes.SymbolClass, cache: dict) -> detect.ClassEntry | 
     T4's three viewports still need scale handling rather than a bigger tolerance.
     """
     try:
-        r, found = _page_bits(DEFAULT_SOURCE, symbol.anchor.page_index, symbol, cache)
+        r, found, _ = _page_bits(DEFAULT_SOURCE, symbol.anchor.page_index, symbol, cache)
     except (RuntimeError, ValueError, IndexError):
         return None  # the anchor's sheet is not in this drawing
     return detect.build_entry(symbol, r, found)
@@ -109,12 +115,13 @@ def run_page(
             continue
         # Each class is detected on the segmentation IT uses, exactly as the server does --
         # grading a class on ink it never sees would measure the wrong thing.
-        r, found = _page_bits(source, index, symbol, cache)
+        r, found, hosts = _page_bits(source, index, symbol, cache)
         # The server counts inside the sheet's drawing blocks, so the harness has to as
         # well. Grading a wider pool than the tool actually uses would report false
         # positives nobody can see and would drift from the thing being measured.
         detections.extend(
-            detect.detect(r, found, [entry], regions=regions.segment(r, found))
+            detect.detect(r, found, [entry], regions=regions.segment(r, found),
+                          hosts=hosts)
         )
 
     graded = {s.id for s in classes.all_classes()} - {row.split(":")[0] for row in skipped}

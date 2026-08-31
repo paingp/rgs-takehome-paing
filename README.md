@@ -13,6 +13,41 @@ ground truth for grading, and never reaches the detector.
 
 ## Status
 
+**Tested on a drawing set by another firm, and one thing broke.** `documents/uri_2511plans.pdf`
+is a University of Rhode Island residence-hall bid set by Tecton Architects, from Rhode
+Island's public purchasing portal — different firm, different owner, **3/32" scale** against
+Skanksa's 1/8", and page rotation 0 against 90/270.
+
+Everything that reads a drawing generalised with no edit: rasterisation, coordinates, region
+segmentation, line suppression, candidates, snapping, counting. Template-matched symbols count.
+**Doors do not** — and the arc detector is not the reason. Run directly it finds 66–80 swings
+at a median radius of 84 px, exactly what 3/32" predicts. But `profile_selection` will not read
+a Tecton door as an arc, so `identify` never offers `door_swing`, the generic template path runs
+instead, and you get **27 where the arc detector would find 75**.
+
+The cause is measured, and it is a bug this repo already documented on T4: `is_swing` and
+`ARC_SPANS_SELECTION` both judge an arc by the bounding box of the blob it landed in. Tecton
+draws the door leaf flat against the wall, so the jamb shares the arc's component — radius 81 px
+inside a 146 px component, a ratio of 0.55 against gates at 0.65 and 0.60. On Skanksa the ratio
+is about 1.0 and nobody noticed. See `PROGRESS.md`, "Generalisation, step 2".
+
+**The detail marker ships with the tool, and a sheet is read before you drag on it.** Four
+classes are registered.
+
+The detail marker — a circle split by a bar, detail number over sheet number, fused to a
+hatched arrowhead — was added from the viewer, where it lived in one uncommitted `classes.json`.
+15 instances across T3, T9 and T10 score **0.913–1.000** against a best-false-positive of
+**0.574**, the widest separation of any class here, so its gates are set from that gap (0.85 /
+0.70) rather than left on the defaults a viewer-named class gets. It shares the hatched wedge
+with the interior elevation marker and neither scores above 0.35 against the other's template;
+the graded sheets are unchanged.
+
+The first drag on a sheet used to cost **~23 s** and every drag after it ~0.3 s — the same
+cache, and none of the work depends on where the box was drawn. It now starts when the sheet
+opens (`POST /api/pages/N/warm`, which returns in 6 ms and builds off-thread), and a drag that
+lands while it is still running joins the pass in flight instead of starting a second one.
+A spinner in the panel says which of the three waits you are in.
+
 **Ground truth and grading are in.** Annotate a page in the viewer — count, accept with `A`,
 reject with `R`, record what the detector *missed* with `M`, mark an instance something
 crosses with `O`, correct a box with `E`, save with `S` — then grade it:
@@ -28,20 +63,55 @@ whether they are all found or all missed. Nothing here was gradeable before — 
 checked by eye against a contact sheet, and three changes in one session each moved counts
 invisibly until someone looked.
 
+`+review` is recall counting the review-band hits that landed on a real instance. It sits
+beside `recall`, never replacing it: `recall` still counts only what the tool asserted, and the
+gap between the two is exactly the human effort the tool is asking for. Without that column
+the occlusion work was unmeasurable — an instance deliberately routed to review read as a
+false negative *and* as more review volume, so every number moved the wrong way.
+
 A class is graded on any sheet, not only the one it was registered from: the entry is built on
 its anchor page and run against the page under test. A class nobody has annotated on that page
 is named and skipped rather than scored — `-m eval.suites --page 4` used to report 27 misses
 and a precision of **1.000** against a detector it had never asked to look.
 
+**Or press Evaluate in the viewer**, which scores something different: **your review**, not a
+detector run. Go through every match with `A` and `R`, and what you accepted is what the tool
+found — whichever band it came from — while what you rejected is a false positive. Six rows:
+
+```
+detected              12 / 12
+missed                     0
+occluded detections      2 / 2
+false positives            8
+average precision      98.8%
+recall                100.0%
+```
+
+`average precision` is not `precision`. It walks the precision–recall curve in the detector's
+own score order, so a wrong match outranking right ones costs AP while leaving precision
+alone — the 98.8% above is one rejection that scored higher than one accepted match. That is
+the case a score threshold would get wrong, and it is the only number here that sees it.
+
+The offline harness reports the same page as 9 of 12 with three held for review, and both are
+right: nobody has looked at those three, so the tool's answer is still "I don't know". The
+panel says which run it is showing.
+
+Everything graded is drawn on the sheet; only the misses are listed row by row, because they
+are the one thing left to act on. It grades what was already counted rather than counting
+again, so it is instant, and only the classes you actually counted are scored: grading one the
+detector never ran for would report every one of its annotations as a miss. The ground-truth
+overlay narrows to that class at the same time.
+
 **Where the results are.** Each run writes `eval/reports/<document>/pageNNN.json`: the metrics,
 and every box behind them — what was found, what was missed, what was claimed wrongly, what
-went to review. Press `V` in the viewer to draw that run over the sheet:
+went to review. Press `V` in the viewer to draw a run over the sheet:
 
 ```
 green            found it
 vermillion       claimed ink that is not the symbol
 vermillion, dashed   a real instance it never claimed
-amber, dotted    sent to review rather than counted
+amber, solid     found a real instance, waiting for a yes
+amber, dotted    sent to review and sitting on nothing
 ```
 
 Click any row in the Grading panel to fly to the ink. This is the answer to *which one* — the
@@ -61,7 +131,19 @@ the detector found the instance. It used to be: accepting a hit wrote `occluded:
 crosses this"*. That made the split circular — a crossed symbol the detector did find could
 never enter it, and occluded recall started at 0 by construction.
 
-**Gate 5: doors count, by a different detector.** Two classes are registered. 192 tests pass.
+**Gate 6: receptacles count, and the first electrical sheet broke two assumptions.** Three
+classes were registered at this point. 197 tests pass.
+
+The duplex receptacle needed a pipeline change twice over, and neither was a threshold. Its
+linework is far lighter than an architectural sheet's -- median pixel 232 against a cut at 230
+-- so at the default it arrived as nine fragments and its template matched 2,312 things;
+`SymbolClass.ink_threshold` is now a per-class knob because lineweight follows the symbol's CAD
+layer, and lowering it globally costs two doors and a marker on T5. Then the region gate, which
+reads E4's screened plan as a notes column and deleted all 50 MP of it: `regions.countable` now
+stands down rather than delete a sheet. **96 counted on E4**, against 92 from an independent NCC
+spike and 90 from vector motif clustering. Ungraded until E4 is annotated.
+
+**Gate 5: doors count, by a different detector.** Two classes are registered.
 
 The elevation marker is matched against a template bank. A door is not: measured on T5, ink
 per door varies **11.4x** once line suppression has run, because it leaves a different amount
@@ -153,7 +235,7 @@ takeoff/          detector core — pure Python, no HTTP, no UI
   vector_gt.py    vector-layer ground-truth bootstrap (grading only)
 server/           FastAPI adapter + OpenSeadragon viewer            [live]
 eval/             matching, metrics, calibration, HTML report
-gt/               reviewed ground truth, one JSON per page
+ground_truth/     reviewed ground truth, one JSON per page
 golden/           committed regression counts
 cache/            rasters and tile pyramids, keyed by PDF hash — gitignored, rebuildable
 scratch/          throwaway spikes, kept for reference — do not build on them
@@ -365,7 +447,7 @@ opacity. The two are different facts: the detector's confidence does not change 
 person disagreed with it, and a review that overwrote the band would destroy the evidence for
 recalibrating thresholds later. Verdicts key off the detection id, which hashes position and
 class, so they survive a re-count of the same page. They are **session-only** — persisting
-them is ground-truth work and belongs with `gt/`.
+them is ground-truth work and belongs with `ground_truth/`.
 
 ## Opening a drawing
 
@@ -406,7 +488,10 @@ symbol.
 One gesture, five steps, and nothing in between asks you anything.
 
 1. **Snap.** The drag box resolves to the ink you enclosed (`candidates.snap`). Blobs whose
-   *ink* is 60% inside are kept; a line of text running out of the box is dropped.
+   *ink* is 60% inside are kept and then **cut at the box edge** — the symbol is never larger
+   than what you drew, so a duct line curling off one corner of a diffuser stays out no matter
+   how it is attached. A line of characters that does not include the symbol reads as a label
+   and is switched off, but it is still drawn: click it to put it back.
 2. **Profile.** `detect.profile_selection` measures what that ink is. A thin blob holding a
    clean circular arc means the symbol is a curve; anything else is a shape.
 3. **Identify.** `detect.identify` asks which registered symbol this is — comparing a measured
@@ -417,6 +502,20 @@ One gesture, five steps, and nothing in between asks you anything.
    the ink it claims, so one physical symbol is counted once.
 5. **Band and annotate.** `banding.band` puts each result in counted / review / rejected, and
    `layout.label_for` reads its caption off the PDF text layer.
+
+**Naming a symbol the tool has never seen.** Select it and press **+ New class**. The drag is
+stored as that class's reference, so it is recognised on other instances and other sheets, can
+be annotated against and can be graded — the same path a built-in takes. It counts on the
+generic 0.90/0.80 gates until it has ground truth of its own, which are the numbers an
+unregistered symbol was already counted on: naming changes what it is called and what it can be
+measured against, not how it scores. User classes live in `classes.json`, which is not
+committed.
+
+**Removing one.** Press **Classes** for the roster of everything the tool can annotate and
+grade. A class you added carries a **Remove** button; a built-in is marked `built in` and has
+none, because its reference lives in `takeoff/classes.py` rather than in data. Removing asks
+first, and says how many annotations on the page use the class — those are kept, keep their
+label, and are picked back up if you re-add the same name.
 
 **There is no dropdown, deliberately.** There used to be, and it was a second input that could
 disagree with the drag: selecting a marker while it still said "door" applied the door's
