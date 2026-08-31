@@ -50,10 +50,10 @@ once.
 
 To do it by hand instead:
 
-```powershell
+```
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m pytest -m smoke
+.venv/Scripts/python.exe -m pip install -r requirements.txt
+.venv/Scripts/python.exe -m pytest -m smoke
 ```
 
 ### Running the full test suite
@@ -61,8 +61,8 @@ python -m venv .venv
 Installing does **not** run the accuracy tests, because "is the install correct" and "is the
 detector accurate" are different questions. When you want the second one:
 
-```powershell
-.venv\Scripts\python.exe -m pytest              # all 235 tests, about 20 minutes
+```
+.venv/Scripts/python.exe -m pytest              # all 235 tests, about 20 minutes
 ```
 
 It is slow for a real reason: about thirty of those tests run a complete sheet-wide detection
@@ -75,8 +75,8 @@ symbol glyph needs `sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='u
 
 ## Run
 
-```powershell
-.venv\Scripts\python.exe -m uvicorn server.app:app
+```
+.venv/Scripts/python.exe -m uvicorn server.app:app
 ```
 
 Then open **http://127.0.0.1:8000/?page=5** — sheet T5, a floor plan with doors and elevation
@@ -86,8 +86,8 @@ The first view of any sheet builds a tile pyramid so the browser can pan and zoo
 drawing smoothly. That takes about 15 seconds and 9 MB, shows a progress bar, and is cached
 afterwards, so a sheet is only slow the first time. To build one ahead of time:
 
-```powershell
-.venv\Scripts\python.exe -m takeoff.raster --page 5 --dzi
+```
+.venv/Scripts/python.exe -m takeoff.raster --page 5 --dzi
 ```
 
 ## Using it
@@ -140,8 +140,8 @@ remove anything you added.
 
 ## Grading from the command line
 
-```powershell
-.venv\Scripts\python.exe -m eval.suites --page 5
+```
+.venv/Scripts/python.exe -m eval.suites --page 5
 ```
 
 This runs a full detection pass for every registered class and scores it against the page's
