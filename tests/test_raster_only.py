@@ -14,6 +14,10 @@ import pytest
 
 PACKAGE = Path(__file__).resolve().parent.parent / "takeoff"
 
+# Part of the install check: `pytest -m smoke`, which is what install.ps1 runs. This one proves
+# the package imports at all and that the raster-only boundary still holds.
+pytestmark = pytest.mark.smoke
+
 FORBIDDEN = {"pymupdf", "fitz"}
 
 # May import pymupdf: they are the boundary itself, or grading-only.
@@ -146,6 +150,7 @@ def test_spaces_is_runtime_pure_so_detectors_may_import_it() -> None:
 
 TYPE_CHECKING_FORM = """
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     import pymupdf
 """

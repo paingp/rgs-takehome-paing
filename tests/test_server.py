@@ -24,12 +24,18 @@ def client() -> TestClient:
     return TestClient(app)
 
 
+# These two are part of the install check (`pytest -m smoke`): between them they prove FastAPI,
+# starlette and uvicorn are installed, the app imports, and the viewer's static assets are on
+# disk where the server expects them. They share the module fixture, so the pair costs one tile
+# pyramid build and nothing more.
+@pytest.mark.smoke
 def test_index_serves_the_viewer(client: TestClient) -> None:
     body = client.get("/").text
     assert "openseadragon.min.js" in body
     assert "viewer.js" in body
 
 
+@pytest.mark.smoke
 def test_pages_reports_the_sheet_count(client: TestClient) -> None:
     meta = client.get("/api/pages").json()
     assert meta["count"] == 28

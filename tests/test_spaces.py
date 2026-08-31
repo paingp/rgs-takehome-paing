@@ -19,6 +19,10 @@ import pytest
 from takeoff.raster import render
 from takeoff.spaces import PageSpace, px_to_sheet, sheet_rect_to_px, sheet_to_px
 
+# Part of the install check: `pytest -m smoke`, which is what install.ps1 runs. These
+# prove numpy and the coordinate maths that everything else is expressed in.
+pytestmark = pytest.mark.smoke
+
 PDF = "Skanksa.pdf"
 PROBE_DPI = 100  # enough to see a text stroke; a full-res render is not needed here
 

@@ -15,6 +15,10 @@ from fastapi.testclient import TestClient
 from server.app import BUNDLED_SOURCE, app
 from takeoff import banding, candidates as cand, classes, detect, doors, layout, raster
 
+# Part of the install check: `pytest -m smoke`, which is what install.ps1 runs. These
+# prove Pillow, and that an image is a first-class input alongside the PDF.
+pytestmark = pytest.mark.smoke
+
 PDF = "Skanksa.pdf"
 T5 = 4
 

@@ -25,3 +25,10 @@ packages = ["takeoff", "server", "eval"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# `pytest -m smoke` is what install.ps1 / install.sh run: it answers "is the install correct",
+# which is a different question from "is the detector accurate". The rest of the suite runs
+# real detection over whole 78-megapixel sheets and takes about twenty minutes; that belongs in
+# a deliberate `pytest` run, not in a setup script.
+markers = [
+    "smoke: proves the install works. No accuracy claims, no full-sheet detection.",
+]

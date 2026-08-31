@@ -36,27 +36,42 @@ For how it works internally and why it was built this way, see
 Requires **Python 3.14**.
 
 ```powershell
-.\bootstrap.ps1          # Windows
-./bootstrap.sh           # macOS / Linux
+.\install.ps1          # Windows
+./install.sh           # macOS / Linux
 ```
 
 The script creates `.venv` if it is missing, installs the pinned dependency set from
-`requirements.txt`, and runs the test suite. A green run means the install is good — 235 tests,
-about 20 minutes, because many of them run real detection over real sheets.
+`requirements.txt`, and then checks the install by running `pytest -m smoke` — 38 tests in about
+20 seconds, covering every dependency the tool needs. A green run means you are ready.
+
+On a fresh clone the dependency step downloads roughly **250 MB** (OpenCV, PyMuPDF, NumPy,
+Pillow), so expect it to sit there for a few minutes. That is the slow part, and it only happens
+once.
 
 To do it by hand instead:
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe -m pytest -m smoke
 ```
 
-Two things that will bite on this machine specifically:
+### Running the full test suite
 
-- Import the PDF library as `pymupdf`, not the deprecated `fitz` alias.
-- The console is cp1252, so any script that prints a symbol glyph needs
-  `sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')`.
+Installing does **not** run the accuracy tests, because "is the install correct" and "is the
+detector accurate" are different questions. When you want the second one:
+
+```powershell
+.venv\Scripts\python.exe -m pytest              # all 235 tests, about 20 minutes
+```
+
+It is slow for a real reason: about thirty of those tests run a complete sheet-wide detection
+pass over a 78-megapixel raster, which is the product being exercised end to end rather than a
+unit test. The first run is slower still, because it has to build the raster and tile caches
+that later runs reuse.
+
+One local quirk worth knowing: this machine's console is cp1252, so any script that prints a
+symbol glyph needs `sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')`.
 
 ## Run
 

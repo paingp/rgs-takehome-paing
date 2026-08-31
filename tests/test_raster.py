@@ -16,6 +16,10 @@ import pytest
 
 from takeoff import raster
 
+# Part of the install check: `pytest -m smoke`, which is what install.ps1 runs. These
+# prove PyMuPDF opens the bundled PDF, OpenCV renders it, and a tile pyramid builds.
+pytestmark = pytest.mark.smoke
+
 PDF = "Skanksa.pdf"
 E4 = 25             # page index of sheet E4, the spike's reference sheet
 T5 = 4              # page index of sheet T5, where the gated build starts

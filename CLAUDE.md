@@ -8,14 +8,17 @@ Read [`ARCHITECTURE.md`](ARCHITECTURE.md) before changing anything in `takeoff/`
 ## Commands
 
 ```powershell
-.\bootstrap.ps1                                          # venv + pinned deps + tests
-.venv\Scripts\python.exe -m pytest -q                    # 235 tests, ~20 min
+.\install.ps1                                            # venv + pinned deps + install check
+.venv\Scripts\python.exe -m pytest -m smoke              # 38 tests, ~20 s: is the install ok
+.venv\Scripts\python.exe -m pytest -q                    # all 235, ~20 min: is it accurate
 .venv\Scripts\python.exe -m pytest -q tests/test_doors.py -k arc     # one file, one pattern
 .venv\Scripts\python.exe -m uvicorn server.app:app       # viewer on :8000, no --reload
 .venv\Scripts\python.exe -m eval.suites --page 5         # grade one sheet against annotations
 ```
 
-The suite is slow because most of it runs real detection over real sheets. Run one file while
+The full suite is slow because about thirty of its tests run a complete sheet-wide detection
+pass — that is the product end to end, not a unit test. `-m smoke` is the subset that proves the
+install works and makes no accuracy claim; it is what `install.ps1` runs. Run one file while
 iterating; run the whole thing before saying you are done.
 
 ## Layout
@@ -62,10 +65,11 @@ before proposing a change to arc ranking, the door gates, or the quality constan
 **All coordinate conversion lives in `spaces.py`.** Pages are rotated 90°/270° and the text
 layer stores unrotated coordinates; anything that converts by hand will be silently wrong.
 
-## Machine gotchas
+## Gotchas
 
-- `import pymupdf`, not the deprecated `fitz`.
-- Console output is cp1252. A script printing symbol glyphs needs
+- **`import pymupdf`, not `fitz`.** Not a local quirk — `fitz` is PyMuPDF's old import name,
+  deprecated library-wide and warning on every platform. New code uses `pymupdf`.
+- Console output on this machine is cp1252. A script printing symbol glyphs needs
   `sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')`.
 - Run uvicorn **without** `--reload`: it watches `.venv` and `cache/`, misses real edits, and can
   half-restart while the old worker keeps serving stale code.
